@@ -1,0 +1,69 @@
+# Copyright (C) 2024 Chocante
+# This file is distributed under the GNU General Public License v3.0.
+msgid ""
+msgstr ""
+"Project-Id-Version: VAT EU 1.0.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/chocante-vat-eu\n"
+"POT-Creation-Date: 2024-08-29T10:45:14+00:00\n"
+"PO-Revision-Date: 2024-08-29 12:49+0200\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: pl_PL\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4.4\n"
+"X-Domain: chocante-vat-eu\n"
+
+#. Plugin Name of the plugin
+#: chocante-vat-eu.php
+msgid "VAT EU"
+msgstr "VAT UE"
+
+#. Description of the plugin
+#: chocante-vat-eu.php
+msgid "Validate European Union VAT number."
+msgstr "Weryfikuj europejski numer VAT."
+
+#. Author of the plugin
+#: chocante-vat-eu.php
+msgid "Chocante"
+msgstr ""
+
+#: includes/class-chocante-vat-eu.php:55
+msgid "Cloning is forbidden."
+msgstr ""
+
+#: includes/class-chocante-vat-eu.php:62
+msgid "Unserializing instances of this class is forbidden."
+msgstr ""
+
+#: includes/class-chocante-vat-eu.php:117
+#: includes/class-chocante-vat-eu.php:170
+#: includes/class-chocante-vat-eu.php:296
+msgid "VAT / Tax ID"
+msgstr "Numer NIP / VAT UE"
+
+#. translators: Missing Tax ID.
+#. translators: Missing country.
+#. translators: Missing company name.
+#: includes/class-chocante-vat-eu.php:204
+#: includes/class-chocante-vat-eu.php:207
+#: includes/class-chocante-vat-eu.php:210
+msgid "Please enter %s."
+msgstr "%s jest wymaganym polem."
+
+#. translators: Incorrect Tax ID format.
+#: includes/class-chocante-vat-eu.php:213
+msgid "Field %s has incorrect format."
+msgstr "%s ma nieprawidłowy format."
+
+#. translators: Service temporarily unavailable.
+#: includes/class-chocante-vat-eu.php:216
+msgid "Unable to verify the VAT / Tax ID. Please wait and try again."
+msgstr "Nie możemy teraz zweryfikować numeru VAT. Prosimy spróbować ponownie za chwilę."
+
+#. translators: Invalid Tax ID.
+#: includes/class-chocante-vat-eu.php:219
+msgid "VAT / Tax ID is invalid."
+msgstr "Numer VAT jest nieprawidłowy."
