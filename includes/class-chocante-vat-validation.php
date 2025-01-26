@@ -12,6 +12,8 @@
  * @version   1.1.3
  */
 
+use function WPML\FP\apply;
+
 /**
  * The Chocante_VAT_Validation class.
  */
@@ -130,9 +132,8 @@ class Chocante_VAT_Validation {
 		),
 		// Poland.
 		'PL' => array(
-			'length'   => 10,
-			'pattern'  => '/\d{10}$/',
-			'domestic' => 'validate_nip',
+			'length'  => 10,
+			'pattern' => '/\d{10}$/',
 		),
 		// Portugal.
 		'PT' => array(
@@ -268,15 +269,11 @@ class Chocante_VAT_Validation {
 			return false;
 		}
 
-		// Check for domestic validation method.
-		if ( isset( self::EU_COUNTRY_LIST[ $country ]['domestic'] ) ) {
-			$validate_function = self::EU_COUNTRY_LIST[ $country ]['domestic'];
+		// External validator.
+		$external = apply_filters( 'wp_vat_eu_validator_' . $country, null, $vat_number );
 
-			if ( $this->$validate_function( $vat_number ) ) {
-				return $vat_number;
-			}
-
-			return false;
+		if ( isset( $external ) ) {
+			return $external ? $vat_id : $external;
 		}
 
 		try {
@@ -319,27 +316,6 @@ class Chocante_VAT_Validation {
 	 */
 	public function get_error() {
 		return $this->error;
-	}
-
-	/**
-	 * Non-EU VAT validation for PL
-	 *
-	 * @param string $tax_id VAT number.
-	 * @return bool
-	 */
-	private function validate_nip( $tax_id ) {
-		$weights = array( 6, 5, 7, 2, 3, 4, 5, 6, 7 );
-		$sum     = 0;
-
-		for ( $i = 0; $i < 9; $i++ ) {
-			$sum += $tax_id[ $i ] * $weights[ $i ];
-		}
-
-		if ( ( $sum % 11 ) % 10 === intval( $tax_id[9] ) ) {
-			return true;
-		}
-
-		return false;
 	}
 
 	/**
