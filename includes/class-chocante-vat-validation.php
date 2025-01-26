@@ -253,7 +253,7 @@ class Chocante_VAT_Validation {
 			return $vat_id;
 		}
 
-		$vat_number = $this->split_vat_id( strtoupper( $vat_id ), $country );
+		$vat_number = $this->split_vat_id( strtoupper( $vat_id ) );
 		$vat_id     = $country . $vat_number;
 
 		if ( ! preg_match( self::EU_COUNTRY_LIST[ $country ]['pattern'], $vat_number ) ) {
@@ -340,5 +340,22 @@ class Chocante_VAT_Validation {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Check if EU country VAT
+	 *
+	 * @param string $country Country code.
+	 * @param string $vat_id EU VAT number.
+	 * @return bool
+	 */
+	public function validate_vat_format( $country, $vat_id ) {
+		if ( false === $this->validate_country( $country ) ) {
+			return true;
+		}
+
+		$vat_number = $this->split_vat_id( strtoupper( $vat_id ) );
+
+		return preg_match( self::EU_COUNTRY_LIST[ $country ]['pattern'], $vat_number );
 	}
 }

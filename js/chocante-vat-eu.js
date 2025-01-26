@@ -31,6 +31,8 @@
         taxIdFieldParent.removeClass(`${REQUIRED_CLASS} ${INVALID_CLASS} ${VALIDATED_CLASS}`);
       });
     }
+
+    checkoutForm.trigger('update');
   });
 
   $(document.body).on('checkout_error', function (event, errorMessage) {

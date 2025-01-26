@@ -33,6 +33,11 @@ class Chocante_VAT_EU {
 	private $validator;
 
 	/**
+	 * Field name
+	 */
+	const TAX_ID = 'billing_tax_id';
+
+	/**
 	 * Constructor
 	 */
 	public function __construct() {
@@ -104,6 +109,17 @@ class Chocante_VAT_EU {
 
 		// Add front-end validation to checkout.
 		add_action( 'woocommerce_before_checkout_form', array( $this, 'add_client_checkout_validation' ) );
+
+		// Display Tax rates in cart / checkout.
+		add_filter( 'woocommerce_cart_totals_order_total_html', array( $this, 'hide_including_tax_in_total' ) );
+		add_filter( 'woocommerce_cart_hide_zero_taxes', '__return_false' );
+		add_filter( 'woocommerce_countries_tax_or_vat', array( $this, 'add_rate_to_tax_or_vat' ) );
+		add_filter( 'woocommerce_cart_tax_totals', array( $this, 'add_rate_to_tax_label' ) );
+		add_action( 'woocommerce_review_order_before_order_total', array( $this, 'display_tax_in_order_review' ) );
+		add_action( 'woocommerce_cart_totals_before_order_total', array( $this, 'display_tax_in_order_review' ) );
+		add_action( 'woocommerce_checkout_update_order_review', array( $this, 'save_tax_id_in_customer' ) );
+		add_filter( 'woocommerce_matched_rates', array( $this, 'calc_company_tax' ), 10 );
+		add_filter( 'woocommerce_calc_shipping_tax', array( $this, 'calc_company_shipping_tax' ) );
 	}
 
 	/**
@@ -113,7 +129,7 @@ class Chocante_VAT_EU {
 	 * @return array
 	 */
 	public function add_tax_id_to_billing_address( $fields ) {
-		$fields['billing_tax_id'] = array(
+		$fields[ self::TAX_ID ] = array(
 			'label'    => __( 'VAT / Tax ID', 'chocante-vat-eu' ),
 			'required' => 'required' === get_option( 'woocommerce_checkout_company_field', 'optional' ),
 			'class'    => array( 'form-row-wide' ),
@@ -137,7 +153,7 @@ class Chocante_VAT_EU {
 			$changes          = $customer->get_changes();
 			$company_name     = isset( $changes['billing']['company'] ) ? $changes['billing']['company'] : $current_customer->get_billing_company();
 			$country          = isset( $changes['billing']['country'] ) ? $changes['billing']['country'] : $current_customer->get_billing_country();
-			$tax_id           = $customer->get_meta( 'billing_tax_id' );
+			$tax_id           = $customer->get_meta( self::TAX_ID );
 			$has_company_name = ! empty( $company_name );
 			$has_tax_id       = ! empty( $tax_id );
 
@@ -147,7 +163,7 @@ class Chocante_VAT_EU {
 				if ( false === $validated_tax_id ) {
 					wc_add_notice( $this->get_validation_error( $this->validator->get_error(), $address ), 'error' );
 				} else {
-					$customer->update_meta_data( 'billing_tax_id', $validated_tax_id );
+					$customer->update_meta_data( self::TAX_ID, $validated_tax_id );
 				}
 			} elseif ( $has_tax_id ) {
 				wc_add_notice( $this->get_validation_error( 'MISSING_COMPANY_NAME', $address ), 'error' );
@@ -161,12 +177,12 @@ class Chocante_VAT_EU {
 	public function validate_tax_id_in_checkout() {
 		$company_name     = isset( $_POST['billing_company'] ) ? wp_unslash( sanitize_text_field( $_POST['billing_company'] ) ) : ''; // @codingStandardsIgnoreLine.
 		$country          = isset( $_POST['billing_country'] ) ? wp_unslash( sanitize_text_field( $_POST['billing_country'] ) ) : ''; // @codingStandardsIgnoreLine.
-		$tax_id           = isset( $_POST['billing_tax_id'] ) ? wp_unslash( sanitize_text_field( $_POST['billing_tax_id'] ) ) : ''; // @codingStandardsIgnoreLine.
+		$tax_id           = isset( $_POST[self::TAX_ID] ) ? wp_unslash( sanitize_text_field( $_POST[self::TAX_ID] ) ) : ''; // @codingStandardsIgnoreLine.
 		$has_company_name = ! empty( $company_name );
 		$has_tax_id       = ! empty( $tax_id );
 
 		$labels = array(
-			'billing_tax_id'  => array(
+			self::TAX_ID      => array(
 				'label' => __( 'VAT / Tax ID', 'chocante-vat-eu' ),
 			),
 			'billing_company' => array(
@@ -183,7 +199,7 @@ class Chocante_VAT_EU {
 			if ( false === $validated_tax_id ) {
 				wc_add_notice( $this->get_validation_error( $this->validator->get_error(), $labels ), 'error' );
 			} else {
-				$_POST['billing_tax_id'] = $validated_tax_id;
+				$_POST[ self::TAX_ID ] = $validated_tax_id;
 			}
 		} elseif ( $has_tax_id ) {
 			wc_add_notice( $this->get_validation_error( 'MISSING_COMPANY_NAME', $labels ), 'error' );
@@ -201,7 +217,7 @@ class Chocante_VAT_EU {
 		switch ( $error ) {
 			case 'MISSING_VAT_ID':
 				// translators: Missing Tax ID.
-				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), $fields['billing_tax_id']['label'] );
+				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), $fields[ self::TAX_ID ]['label'] );
 			case 'MISSING_COUNTRY':
 				// translators: Missing country.
 				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), $fields['billing_country']['label'] );
@@ -210,7 +226,7 @@ class Chocante_VAT_EU {
 				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), $fields['billing_company']['label'] );
 			case 'INCORRECT_FORMAT':
 				// translators: Incorrect Tax ID format.
-				return sprintf( __( 'Field %s has incorrect format.', 'chocante-vat-eu' ), $fields['billing_tax_id']['label'] );
+				return sprintf( __( 'Field %s has incorrect format.', 'chocante-vat-eu' ), $fields[ self::TAX_ID ]['label'] );
 			case 'MS_MAX_CONCURRENT_REQ':
 				// translators: Service temporarily unavailable.
 				return __( 'Unable to verify VAT / Tax ID. Please wait and try again.', 'chocante-vat-eu' );
@@ -231,7 +247,7 @@ class Chocante_VAT_EU {
 	public function add_tax_id_to_my_address( $address, $customer_id, $address_type ) {
 		if ( 'billing' === $address_type ) {
 			$customer = new WC_Customer( $customer_id );
-			$tax_id   = $customer->get_meta( 'billing_tax_id' );
+			$tax_id   = $customer->get_meta( self::TAX_ID );
 
 			if ( isset( $tax_id ) && ! empty( $tax_id ) ) {
 				$address['tax_id'] = $tax_id;
@@ -275,7 +291,7 @@ class Chocante_VAT_EU {
 	 * @return array
 	 */
 	public function add_tax_id_to_order_address( $address, $order ) {
-		$tax_id = $order->get_meta( '_billing_tax_id' );
+		$tax_id = $order->get_meta( '_' . self::TAX_ID );
 
 		if ( isset( $tax_id ) && ! empty( $tax_id ) ) {
 			$address['tax_id'] = $tax_id;
@@ -292,9 +308,11 @@ class Chocante_VAT_EU {
 	 */
 	public function add_tax_id_to_user_profile( $profile_fields ) {
 		$tax_id = array(
-			'billing_tax_id' => array(
+			self::TAX_ID => array(
 				'label'       => __( 'VAT / Tax ID', 'chocante-vat-eu' ),
 				'description' => '',
+				'type'        => 'text',
+				'default'     => '',
 			),
 		);
 
@@ -329,5 +347,134 @@ class Chocante_VAT_EU {
 				'in_footer' => true,
 			)
 		);
+	}
+
+	/**
+	 * Hide including taxes text in cart total
+	 *
+	 * @return string
+	 */
+	public function hide_including_tax_in_total() {
+		return '<strong>' . WC()->cart->get_total() . '</strong>';
+	}
+
+	/**
+	 * Display rate in sum tax label
+	 *
+	 * @param string $tax_label Tax label.
+	 * @return string
+	 */
+	public function add_rate_to_tax_or_vat( $tax_label ) {
+		$tax_rates = WC_Tax::get_rates();
+
+		if ( ! empty( $tax_rates ) ) {
+			$rate = 0;
+
+			foreach ( $tax_rates as $tax ) {
+				$rate += $tax['rate'];
+			}
+
+			return sprintf( '%s %d%%', $tax_label, $rate );
+		}
+
+		return $tax_label;
+	}
+
+	/**
+	 * Display rate in itemized tax label
+	 *
+	 * @param array $tax_totals Cart taxes.
+	 * @return array
+	 */
+	public function add_rate_to_tax_label( $tax_totals ) {
+		$tax_rates = WC_Tax::get_rates();
+
+		foreach ( $tax_totals as &$tax ) {
+			$rate        = $tax_rates[ $tax->tax_rate_id ]['rate'];
+			$tax->label .= sprintf( ' %d%%', $rate );
+		}
+
+		return $tax_totals;
+	}
+
+	/**
+	 * Display VAT in cart & checkout
+	 */
+	public function display_tax_in_order_review() {
+		if ( ! ( wc_tax_enabled() && WC()->cart->display_prices_including_tax() ) ) {
+			return;
+		}
+
+		echo '<tr><th>' . esc_html( WC()->countries->tax_or_vat() ) . '</th><td>';
+		wc_cart_totals_taxes_total_html();
+		echo '</td></tr>';
+	}
+
+	/**
+	 * Save tax id on changes in checkout form
+	 *
+	 * @param string $query Checkout form fields query params.
+	 */
+	public function save_tax_id_in_customer( $query ) {
+		$params = array();
+		parse_str( $query, $params );
+
+		WC()->customer->update_meta_data( self::TAX_ID, $params[ self::TAX_ID ] ?? '' );
+		WC()->customer->set_billing_company( $params['billing_company'] ?? null );
+	}
+
+	/**
+	 * Check if customer qualifies for zero VAT.
+	 */
+	private function validate_eu_company() {
+		$tax_id          = WC()->customer->get_meta( self::TAX_ID );
+		$billing_company = WC()->customer->get_billing_company();
+		$billing_country = WC()->customer->get_billing_country();
+
+		if ( ! ( isset( $tax_id ) && ! empty( $tax_id ) && isset( $billing_company ) && ! empty( $billing_company ) ) ) {
+			return false;
+		}
+
+		if ( WC()->countries->get_base_country() === $billing_country ) {
+			return false;
+		}
+
+		if ( ! $this->validator->validate_vat_format( $billing_country, $tax_id ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Use zero rate for companies
+	 *
+	 * @param array $matched_tax_rates Tax rates.
+	 * @return array
+	 */
+	public function calc_company_tax( $matched_tax_rates ) {
+		if ( $this->validate_eu_company() ) {
+			foreach ( $matched_tax_rates as &$tax ) {
+				$tax['rate'] = 0;
+			}
+		}
+
+		return $matched_tax_rates;
+	}
+
+	/**
+	 * Use zero rate for companies (shipping)
+	 *
+	 * @param array $taxes Shipping taxes.
+	 * @return array
+	 */
+	public function calc_company_shipping_tax( $taxes ) {
+		if ( $this->validate_eu_company() ) {
+			foreach ( $taxes as &$tax ) {
+				$tax = 0;
+			}
+		}
+
+		return $taxes;
 	}
 }
