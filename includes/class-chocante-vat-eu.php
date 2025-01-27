@@ -455,6 +455,10 @@ class Chocante_VAT_EU {
 	 * @return array
 	 */
 	public function calc_company_tax( $matched_tax_rates ) {
+		if ( ! function_exists( 'WC' ) || ! isset( WC()->customer ) ) {
+			return $matched_tax_rates;
+		}
+
 		if ( $this->validate_eu_company() ) {
 			foreach ( $matched_tax_rates as &$tax ) {
 				$tax['rate'] = 0;
@@ -471,6 +475,10 @@ class Chocante_VAT_EU {
 	 * @return array
 	 */
 	public function calc_company_shipping_tax( $taxes ) {
+		if ( ! function_exists( 'WC' ) || ! isset( WC()->customer ) ) {
+			return $taxes;
+		}
+
 		if ( $this->validate_eu_company() ) {
 			foreach ( $taxes as &$tax ) {
 				$tax = 0;
