@@ -113,12 +113,15 @@ class Chocante_VAT_EU {
 		// Display Tax rates in cart / checkout.
 		add_filter( 'woocommerce_cart_totals_order_total_html', array( $this, 'hide_including_tax_in_total' ) );
 		add_filter( 'woocommerce_cart_hide_zero_taxes', '__return_false' );
-		add_filter( 'woocommerce_countries_tax_or_vat', array( $this, 'add_rate_to_tax_or_vat' ) );
 		add_filter( 'woocommerce_cart_tax_totals', array( $this, 'add_rate_to_tax_label' ) );
 		add_action( 'woocommerce_review_order_before_order_total', array( $this, 'display_tax_in_order_review' ) );
 		add_action( 'woocommerce_checkout_update_order_review', array( $this, 'save_tax_id_in_customer' ) );
-		add_filter( 'woocommerce_matched_rates', array( $this, 'calc_company_tax' ), 10 );
-		add_filter( 'woocommerce_calc_shipping_tax', array( $this, 'calc_company_shipping_tax' ) );
+
+		if ( ! is_admin() ) {
+			add_filter( 'woocommerce_countries_tax_or_vat', array( $this, 'add_rate_to_tax_or_vat' ) );
+			add_filter( 'woocommerce_matched_rates', array( $this, 'calc_company_tax' ), 10 );
+			add_filter( 'woocommerce_calc_shipping_tax', array( $this, 'calc_company_shipping_tax' ) );
+		}
 	}
 
 	/**
