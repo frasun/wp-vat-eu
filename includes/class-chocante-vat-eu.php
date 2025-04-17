@@ -159,16 +159,18 @@ class Chocante_VAT_EU {
 			$has_company_name = ! empty( $company_name );
 			$has_tax_id       = ! empty( $tax_id );
 
-			if ( $has_company_name ) {
-				$validated_tax_id = $this->validator->validate( $country, $tax_id );
-
-				if ( false === $validated_tax_id ) {
-					wc_add_notice( $this->get_validation_error( $this->validator->get_error(), $address ), 'error' );
+			if ( $has_tax_id ) {
+				if ( ! $has_company_name ) {
+					wc_add_notice( $this->get_validation_error( 'MISSING_COMPANY_NAME', $address ), 'error' );
 				} else {
-					$customer->update_meta_data( self::TAX_ID, $validated_tax_id );
+					$validated_tax_id = $this->validator->validate( $country, $tax_id );
+
+					if ( false === $validated_tax_id ) {
+						wc_add_notice( $this->get_validation_error( $this->validator->get_error(), $address ), 'error' );
+					} else {
+						$customer->update_meta_data( self::TAX_ID, $validated_tax_id );
+					}
 				}
-			} elseif ( $has_tax_id ) {
-				wc_add_notice( $this->get_validation_error( 'MISSING_COMPANY_NAME', $address ), 'error' );
 			}
 		}
 	}
@@ -195,16 +197,18 @@ class Chocante_VAT_EU {
 			),
 		);
 
-		if ( $has_company_name ) {
-			$validated_tax_id = $this->validator->validate( $country, $tax_id );
-
-			if ( false === $validated_tax_id ) {
-				wc_add_notice( $this->get_validation_error( $this->validator->get_error(), $labels ), 'error' );
+		if ( $has_tax_id ) {
+			if ( ! $has_company_name ) {
+				wc_add_notice( $this->get_validation_error( 'MISSING_COMPANY_NAME', $labels ), 'error' );
 			} else {
-				$_POST[ self::TAX_ID ] = $validated_tax_id;
+				$validated_tax_id = $this->validator->validate( $country, $tax_id );
+
+				if ( false === $validated_tax_id ) {
+					wc_add_notice( $this->get_validation_error( $this->validator->get_error(), $labels ), 'error' );
+				} else {
+					$_POST[ self::TAX_ID ] = $validated_tax_id;
+				}
 			}
-		} elseif ( $has_tax_id ) {
-			wc_add_notice( $this->get_validation_error( 'MISSING_COMPANY_NAME', $labels ), 'error' );
 		}
 	}
 
