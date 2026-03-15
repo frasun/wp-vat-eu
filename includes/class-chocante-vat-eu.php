@@ -93,8 +93,14 @@ class Chocante_VAT_EU {
 		// Validate Tax ID in my addresses.
 		add_action( 'woocommerce_after_save_address_validation', array( $this, 'validate_tax_id_in_my_address' ), 10, 4 );
 
+		// Display Tax ID in checkout.
+		add_filter( 'woocommerce_checkout_get_value', array( $this, 'display_tax_id_in_checkout' ), 10, 2 );
+
 		// Validate Tax ID in checkout.
 		add_action( 'woocommerce_checkout_process', array( $this, 'validate_tax_id_in_checkout' ) );
+
+		// Save Tax ID in checkout.
+		add_action( 'woocommerce_checkout_update_order_review', array( $this, 'save_tax_id_in_checkout' ) );
 
 		// Display Tax ID in my addresses.
 		add_filter( 'woocommerce_my_account_my_address_formatted_address', array( $this, 'add_tax_id_to_my_address' ), 10, 3 );
@@ -110,18 +116,8 @@ class Chocante_VAT_EU {
 		// Add front-end validation to checkout.
 		add_action( 'woocommerce_before_checkout_form', array( $this, 'add_client_checkout_validation' ) );
 
-		// Display Tax rates in cart / checkout.
-		add_filter( 'woocommerce_cart_totals_order_total_html', array( $this, 'hide_including_tax_in_total' ) );
-		add_filter( 'woocommerce_cart_hide_zero_taxes', '__return_false' );
-		add_filter( 'woocommerce_cart_tax_totals', array( $this, 'add_rate_to_tax_label' ) );
-		add_action( 'woocommerce_review_order_before_order_total', array( $this, 'display_tax_in_order_review' ) );
-		add_action( 'woocommerce_checkout_update_order_review', array( $this, 'save_tax_id_in_customer' ) );
-
-		if ( ! is_admin() ) {
-			add_filter( 'woocommerce_countries_tax_or_vat', array( $this, 'add_rate_to_tax_or_vat' ) );
-			add_filter( 'woocommerce_matched_rates', array( $this, 'calc_company_tax' ), 10 );
-			add_filter( 'woocommerce_calc_shipping_tax', array( $this, 'calc_company_shipping_tax' ) );
-		}
+		// Display prices in shop.
+		add_action( 'woocommerce_customer_loaded', array( $this, 'set_tax_exemption' ) );
 	}
 
 	/**
@@ -356,139 +352,73 @@ class Chocante_VAT_EU {
 	}
 
 	/**
-	 * Hide including taxes text in cart total
-	 *
-	 * @return string
-	 */
-	public function hide_including_tax_in_total() {
-		return '<strong>' . WC()->cart->get_total() . '</strong>';
-	}
-
-	/**
-	 * Display rate in sum tax label
-	 *
-	 * @param string $tax_label Tax label.
-	 * @return string
-	 */
-	public function add_rate_to_tax_or_vat( $tax_label ) {
-		$tax_rates = WC_Tax::get_rates();
-
-		if ( ! empty( $tax_rates ) ) {
-			$rate = 0;
-
-			foreach ( $tax_rates as $tax ) {
-				$rate += $tax['rate'];
-			}
-
-			return sprintf( '%s %d%%', $tax_label, $rate );
-		}
-
-		return $tax_label;
-	}
-
-	/**
-	 * Display rate in itemized tax label
-	 *
-	 * @param array $tax_totals Cart taxes.
-	 * @return array
-	 */
-	public function add_rate_to_tax_label( $tax_totals ) {
-		$tax_rates = WC_Tax::get_rates();
-
-		foreach ( $tax_totals as &$tax ) {
-			$rate        = $tax_rates[ $tax->tax_rate_id ]['rate'];
-			$tax->label .= sprintf( ' %d%%', $rate );
-		}
-
-		return $tax_totals;
-	}
-
-	/**
-	 * Display VAT in cart & checkout
-	 */
-	public function display_tax_in_order_review() {
-		if ( ! ( wc_tax_enabled() && WC()->cart->display_prices_including_tax() ) ) {
-			return;
-		}
-
-		echo '<tr><th>' . esc_html( WC()->countries->tax_or_vat() ) . '</th><td>';
-		wc_cart_totals_taxes_total_html();
-		echo '</td></tr>';
-	}
-
-	/**
 	 * Save tax id on changes in checkout form
 	 *
 	 * @param string $query Checkout form fields query params.
 	 */
-	public function save_tax_id_in_customer( $query ) {
+	public function save_tax_id_in_checkout( $query ) {
 		$params = array();
 		parse_str( $query, $params );
 
-		WC()->customer->update_meta_data( self::TAX_ID, $params[ self::TAX_ID ] ?? '' );
-		WC()->customer->set_billing_company( $params['billing_company'] ?? null );
+		WC()->session->set( self::TAX_ID, $params[ self::TAX_ID ] );
+
+		$customer = WC()->customer;
+		$customer->update_meta_data( self::TAX_ID, $params[ self::TAX_ID ] ?? '' );
+		$customer->set_billing_company( $params['billing_company'] ?? null );
+
+		if ( isset( $params['billing_country'] ) ) {
+			$customer->set_billing_country( $params['billing_country'] );
+		}
+
+		$this->set_tax_exemption( $customer );
 	}
 
 	/**
 	 * Check if customer qualifies for zero VAT.
+	 *
+	 * @param WC_Customer $customer Customer object.
+	 * @return bool
 	 */
-	private function validate_eu_company() {
-		$tax_id          = WC()->customer->get_meta( self::TAX_ID );
-		$billing_company = WC()->customer->get_billing_company();
-		$billing_country = WC()->customer->get_billing_country();
+	private function validate_eu_company( $customer ) {
+		$tax_id          = $customer->get_meta( self::TAX_ID );
+		$billing_company = $customer->get_billing_company();
+		$billing_country = $customer->get_billing_country();
 
 		if ( ! ( isset( $tax_id ) && ! empty( $tax_id ) && isset( $billing_company ) && ! empty( $billing_company ) ) ) {
 			return false;
 		}
 
-		if ( WC()->countries->get_base_country() === $billing_country ) {
+		$base_country = WC()->countries->get_base_country();
+		$eu_countries = WC()->countries->get_european_union_countries( 'eu_vat' );
+
+		if ( in_array( $base_country, $eu_countries, true ) && $base_country === $billing_country ) {
 			return false;
 		}
 
-		if ( ! $this->validator->validate_vat_format( $billing_country, $tax_id ) ) {
-			return false;
-		}
-
-		return true;
+		return $this->validator->validate_vat_format( $billing_country, $tax_id );
 	}
 
 	/**
-	 * Use zero rate for companies
+	 * Set VAT exemption
 	 *
-	 * @param array $matched_tax_rates Tax rates.
-	 * @return array
+	 * @param WC_Customer $customer Customer object.
 	 */
-	public function calc_company_tax( $matched_tax_rates ) {
-		if ( ! function_exists( 'WC' ) || ! isset( WC()->customer ) ) {
-			return $matched_tax_rates;
-		}
-
-		if ( $this->validate_eu_company() ) {
-			foreach ( $matched_tax_rates as &$tax ) {
-				$tax['rate'] = 0;
-			}
-		}
-
-		return $matched_tax_rates;
+	public function set_tax_exemption( $customer ) {
+		$customer->set_is_vat_exempt( $this->validate_eu_company( $customer ) );
 	}
 
 	/**
-	 * Use zero rate for companies (shipping)
+	 * Get Tax ID from session
 	 *
-	 * @param array $taxes Shipping taxes.
-	 * @return array
+	 * @param null   $value Empty value.
+	 * @param string $input Name of the input we want to grab data for. e.g. billing_country.
+	 * @return string|null
 	 */
-	public function calc_company_shipping_tax( $taxes ) {
-		if ( ! function_exists( 'WC' ) || ! isset( WC()->customer ) ) {
-			return $taxes;
+	public function display_tax_id_in_checkout( $value, $input ) {
+		if ( self::TAX_ID === $input ) {
+			return WC()->session->get( self::TAX_ID );
 		}
 
-		if ( $this->validate_eu_company() ) {
-			foreach ( $taxes as &$tax ) {
-				$tax = 0;
-			}
-		}
-
-		return $taxes;
+		return $value;
 	}
 }

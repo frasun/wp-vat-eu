@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VAT EU
  * Description: Validate European Union VAT number.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Chocante
  * Text Domain: chocante-vat-eu
  * Domain Path: /languages
@@ -23,7 +23,7 @@ if ( ! defined( 'MAIN_PLUGIN_FILE' ) ) {
 /**
  * Current plugin version.
  */
-define( 'CHOCANTE_VAT_EU_VERSION', '1.0.0' );
+define( 'CHOCANTE_VAT_EU_VERSION', '1.1.0' );
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-chocante-vat-eu.php';
 add_action( 'plugins_loaded', 'chocante_vat_eu_init', 10 );

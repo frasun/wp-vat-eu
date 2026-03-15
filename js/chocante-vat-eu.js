@@ -12,29 +12,25 @@
   const PARENT_ROW = '.form-row';
 
   // Make VAT field required.
-  // checkoutForm.on('change', `${companyField}, ${taxIdField}`, function () {
-  //   const companyFieldHasValue = $(companyField).val().length > 0;
-  //   const taxIdFieldHasValue = $(taxIdField).val().length > 0;
-  //   const taxIdFieldParent = $(taxIdField).closest(PARENT_ROW);
-  //   const companyFieldParent = $(companyField).closest(PARENT_ROW);
+  checkoutForm.on('change', `${companyField}, ${taxIdField}`, function () {
+    const companyFieldHasValue = $(companyField).val().length > 0;
+    const taxIdFieldHasValue = $(taxIdField).val().length > 0;
+    const taxIdFieldParent = $(taxIdField).closest(PARENT_ROW);
+    const companyFieldParent = $(companyField).closest(PARENT_ROW);
 
-  //   if (companyFieldHasValue && !taxIdFieldHasValue) {
-  //     taxIdFieldParent.removeClass(VALIDATED_CLASS).addClass(`${REQUIRED_CLASS} ${INVALID_CLASS}`);
-  //   }
+    if (!companyFieldHasValue && taxIdFieldHasValue) {
+      companyFieldParent.removeClass(VALIDATED_CLASS).addClass(`${REQUIRED_CLASS} ${INVALID_CLASS}`);
+    }
 
-  //   if (!companyFieldHasValue && taxIdFieldHasValue) {
-  //     companyFieldParent.removeClass(VALIDATED_CLASS).addClass(`${REQUIRED_CLASS} ${INVALID_CLASS}`);
-  //   }
+    if (!companyFieldHasValue && !taxIdFieldHasValue) {
+      window.requestAnimationFrame(function () {
+        companyFieldParent.removeClass(`${REQUIRED_CLASS} ${INVALID_CLASS} ${VALIDATED_CLASS}`);
+        taxIdFieldParent.removeClass(`${REQUIRED_CLASS} ${INVALID_CLASS} ${VALIDATED_CLASS}`);
+      });
+    }
 
-  //   if (!companyFieldHasValue && !taxIdFieldHasValue) {
-  //     window.requestAnimationFrame(function () {
-  //       companyFieldParent.removeClass(`${REQUIRED_CLASS} ${INVALID_CLASS} ${VALIDATED_CLASS}`);
-  //       taxIdFieldParent.removeClass(`${REQUIRED_CLASS} ${INVALID_CLASS} ${VALIDATED_CLASS}`);
-  //     });
-  //   }
-
-  //   checkoutForm.trigger('update');
-  // });
+    checkoutForm.trigger('update');
+  });
 
   $(document.body).on('checkout_error', function (event, errorMessage) {
     if (errorMessage.includes('VAT')) {
