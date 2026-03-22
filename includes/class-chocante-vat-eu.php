@@ -357,20 +357,15 @@ class Chocante_VAT_EU {
 	 * @param string $query Checkout form fields query params.
 	 */
 	public function save_tax_id_in_checkout( $query ) {
-		$params = array();
-		parse_str( $query, $params );
+		parse_str( $query, $data );
+		$tax_id = isset( $data[ self::TAX_ID ] ) ? wc_clean( wp_unslash( $data[ self::TAX_ID ] ) ) : null;
 
-		WC()->session->set( self::TAX_ID, $params[ self::TAX_ID ] );
+		if ( $tax_id ) {
+			$customer = WC()->customer;
+			$customer->update_meta_data( self::TAX_ID, $data[ self::TAX_ID ] ?? '' );
 
-		$customer = WC()->customer;
-		$customer->update_meta_data( self::TAX_ID, $params[ self::TAX_ID ] ?? '' );
-		$customer->set_billing_company( $params['billing_company'] ?? null );
-
-		if ( isset( $params['billing_country'] ) ) {
-			$customer->set_billing_country( $params['billing_country'] );
+			$this->set_tax_exemption( $customer );
 		}
-
-		$this->set_tax_exemption( $customer );
 	}
 
 	/**
@@ -416,7 +411,7 @@ class Chocante_VAT_EU {
 	 */
 	public function display_tax_id_in_checkout( $value, $input ) {
 		if ( self::TAX_ID === $input ) {
-			return WC()->session->get( self::TAX_ID );
+			return WC()->customer->get_meta( self::TAX_ID );
 		}
 
 		return $value;

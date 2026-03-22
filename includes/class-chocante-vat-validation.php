@@ -64,7 +64,7 @@ class Chocante_VAT_Validation {
 			'pattern' => '/\d{9}/',
 		),
 		// Greece.
-		'EL' => array(
+		'GR' => array(
 			'length'  => 9,
 			'pattern' => '/\d{9}/',
 		),
