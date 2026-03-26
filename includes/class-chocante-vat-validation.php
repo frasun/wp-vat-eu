@@ -177,8 +177,8 @@ class Chocante_VAT_Validation {
 	/**
 	 * Remove country code from VAT number (if consists)
 	 *
-	 * @param string $vat_id VAT number.
 	 * @param string $country Selected country.
+	 * @param string $vat_id VAT number.
 	 * @return string
 	 */
 	private function split_vat_id( $country, $vat_id = '' ) {
@@ -335,10 +335,14 @@ class Chocante_VAT_Validation {
 	 */
 	public function validate_vat_format( $country, $vat_id ) {
 		if ( false === $this->validate_country( $country ) ) {
-			return true;
+			return false;
 		}
 
 		$vat_number = $this->split_vat_id( $country, strtoupper( $vat_id ) );
+
+		if ( strlen( $vat_number ) !== self::EU_COUNTRY_LIST[ $country ]['length'] ) {
+			return false;
+		}
 
 		return preg_match( self::EU_COUNTRY_LIST[ $country ]['pattern'], $vat_number );
 	}
