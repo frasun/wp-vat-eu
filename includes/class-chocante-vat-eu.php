@@ -35,7 +35,8 @@ class Chocante_VAT_EU {
 	/**
 	 * Field name
 	 */
-	const TAX_ID = 'billing_tax_id';
+	const TAX_ID            = 'billing_tax_id';
+	const VAT_EXEMPT_COOKIE = 'chocante_vat_exempt';
 
 	/**
 	 * Constructor
@@ -93,14 +94,12 @@ class Chocante_VAT_EU {
 		// Validate Tax ID in my addresses.
 		add_action( 'woocommerce_after_save_address_validation', array( $this, 'validate_tax_id_in_my_address' ), 10, 4 );
 
-		// Display Tax ID in checkout.
-		add_filter( 'woocommerce_checkout_get_value', array( $this, 'display_tax_id_in_checkout' ), 10, 2 );
-
 		// Validate Tax ID in checkout.
 		add_action( 'woocommerce_checkout_process', array( $this, 'validate_tax_id_in_checkout' ) );
 
-		// Save Tax ID in checkout.
+		// Save Tax ID in session.
 		add_action( 'woocommerce_checkout_update_order_review', array( $this, 'save_tax_id_in_checkout' ) );
+		add_filter( 'woocommerce_customer_allowed_session_meta_keys', array( $this, 'store_tax_id_in_session' ) );
 
 		// Display Tax ID in my addresses.
 		add_filter( 'woocommerce_my_account_my_address_formatted_address', array( $this, 'add_tax_id_to_my_address' ), 10, 3 );
@@ -116,8 +115,10 @@ class Chocante_VAT_EU {
 		// Add front-end validation to checkout.
 		add_action( 'woocommerce_before_checkout_form', array( $this, 'add_client_checkout_validation' ) );
 
-		// Display prices in shop.
-		add_action( 'woocommerce_customer_loaded', array( $this, 'set_tax_exemption' ) );
+		// Display prices without VAT.
+		add_action( 'wp', array( $this, 'maybe_set_vat_exemption' ) );
+		add_action( 'wp_login', array( $this, 'set_cookie_on_login' ), 10, 2 );
+		add_action( 'wp_logout', array( $this, 'delete_cookie_on_logout' ) );
 	}
 
 	/**
@@ -154,6 +155,7 @@ class Chocante_VAT_EU {
 			$tax_id           = $customer->get_meta( self::TAX_ID );
 			$has_company_name = ! empty( $company_name );
 			$has_tax_id       = ! empty( $tax_id );
+			$is_vat_exempt    = false;
 
 			if ( $has_tax_id ) {
 				if ( ! $has_company_name ) {
@@ -163,11 +165,16 @@ class Chocante_VAT_EU {
 
 					if ( false === $validated_tax_id ) {
 						wc_add_notice( $this->get_validation_error( $this->validator->get_error(), $address ), 'error' );
+						return;
 					} else {
 						$customer->update_meta_data( self::TAX_ID, $validated_tax_id );
+
+						$is_vat_exempt = $this->validate_eu_company( $validated_tax_id, $company_name, $country );
 					}
 				}
 			}
+
+			$this->set_vat_exemption( $customer, $is_vat_exempt );
 		}
 	}
 
@@ -216,6 +223,7 @@ class Chocante_VAT_EU {
 	 * @return string
 	 */
 	private function get_validation_error( $error, $fields ) {
+		error_log( print_r( $fields, true ) );
 		switch ( $error ) {
 			case 'MISSING_VAT_ID':
 				// translators: Missing Tax ID.
@@ -358,62 +366,122 @@ class Chocante_VAT_EU {
 	 */
 	public function save_tax_id_in_checkout( $query ) {
 		parse_str( $query, $data );
-		$tax_id = isset( $data[ self::TAX_ID ] ) ? wc_clean( wp_unslash( $data[ self::TAX_ID ] ) ) : null;
 
-		if ( $tax_id ) {
-			$customer = WC()->customer;
-			$customer->update_meta_data( self::TAX_ID, $data[ self::TAX_ID ] ?? '' );
+		$post_tax_id  = isset( $data[ self::TAX_ID ] ) ? wc_clean( wp_unslash( $data[ self::TAX_ID ] ) ) : null;
+		$post_company = isset( $data['billing_company'] ) ? wc_clean( wp_unslash( $data['billing_company'] ) ) : null;
+		$customer     = WC()->customer;
 
-			$this->set_tax_exemption( $customer );
+		if ( $post_tax_id ) {
+			$customer->update_meta_data( self::TAX_ID, $post_tax_id );
 		}
+
+		if ( $post_company ) {
+			$customer->set_billing_company( $post_company );
+		}
+
+		$tax_id  = $post_tax_id ?? $customer->get_meta( self::TAX_ID );
+		$company = $post_company ?? $customer->get_billing_company();
+		$country = isset( $data['billing_country'] ) ? wc_clean( wp_unslash( $data['billing_country'] ) ) : $customer->get_billing_country();
+
+		$is_vat_exempt = $this->validate_eu_company( $tax_id, $company, $country );
+		$this->set_vat_exemption( $customer, $is_vat_exempt );
 	}
 
 	/**
-	 * Check if customer qualifies for zero VAT.
+	 * Validate customer data
 	 *
-	 * @param WC_Customer $customer Customer object.
+	 * @param string $tax_id Customer Tax ID.
+	 * @param string $company Customer company name.
+	 * @param string $country Customer billing country.
 	 * @return bool
 	 */
-	private function validate_eu_company( $customer ) {
-		$tax_id          = $customer->get_meta( self::TAX_ID );
-		$billing_company = $customer->get_billing_company();
-		$billing_country = $customer->get_billing_country();
-
-		if ( ! ( isset( $tax_id ) && ! empty( $tax_id ) && isset( $billing_company ) && ! empty( $billing_company ) ) ) {
+	private function validate_eu_company( $tax_id, $company, $country ) {
+		if ( empty( $tax_id ) || empty( $company ) ) {
 			return false;
 		}
 
 		$base_country = WC()->countries->get_base_country();
 		$eu_countries = WC()->countries->get_european_union_countries( 'eu_vat' );
 
-		if ( in_array( $base_country, $eu_countries, true ) && $base_country === $billing_country ) {
+		if ( in_array( $base_country, $eu_countries, true ) && $base_country === $country ) {
 			return false;
 		}
 
-		return $this->validator->validate_vat_format( $billing_country, $tax_id );
+		return $this->validator->validate_vat_format( $country, $tax_id );
 	}
 
 	/**
 	 * Set VAT exemption
 	 *
 	 * @param WC_Customer $customer Customer object.
+	 * @param bool        $is_vat_exempt Has VAT exemption.
 	 */
-	public function set_tax_exemption( $customer ) {
-		$customer->set_is_vat_exempt( $this->validate_eu_company( $customer ) );
+	public function set_vat_exemption( $customer, $is_vat_exempt ) {
+		$customer->set_is_vat_exempt( $is_vat_exempt );
+
+		if ( ( $is_vat_exempt && ! empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] ) ) || ( ! $is_vat_exempt && empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] ) ) ) {
+			return;
+		}
+
+		$cookie_expiration = $is_vat_exempt ? intval( apply_filters( 'wc_session_expiration', is_user_logged_in() ? WEEK_IN_SECONDS : 2 * DAY_IN_SECONDS ) ) : - DAY_IN_SECONDS;
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		setcookie( self::VAT_EXEMPT_COOKIE, $is_vat_exempt ? 1 : 0, time() + $cookie_expiration, '/', COOKIE_DOMAIN, true, false );
 	}
 
 	/**
-	 * Get Tax ID from session
+	 * Store Tax ID in customer session
 	 *
-	 * @param null   $value Empty value.
-	 * @param string $input Name of the input we want to grab data for. e.g. billing_country.
-	 * @return string|null
+	 * @param array $keys Keys allowed to store.
 	 */
-	public function display_tax_id_in_checkout( $value, $input ) {
-		if ( self::TAX_ID === $input ) {
-			return WC()->customer->get_meta( self::TAX_ID );
+	public function store_tax_id_in_session( $keys ) {
+		$keys[] = self::TAX_ID;
+		return $keys;
+	}
+
+	/**
+	 * Set VAT exempt cookie on user login
+	 *
+	 * @param string     $user_login User login.
+	 * @param int|object $user       User.
+	 */
+	public function set_cookie_on_login( $user_login, $user ) {
+		$customer      = new \WC_Customer( $user->ID, true );
+		$tax_id        = $customer->get_meta( self::TAX_ID );
+		$company_name  = $customer->get_billing_company();
+		$country       = $customer->get_billing_country();
+		$is_vat_exempt = $this->validate_eu_company( $tax_id, $company_name, $country );
+
+		$this->set_vat_exemption( $customer, $is_vat_exempt );
+	}
+
+	/**
+	 * Delete VAT exempt cookie on user logout
+	 */
+	public function delete_cookie_on_logout() {
+		$this->set_vat_exemption( WC()->customer, false );
+	}
+
+	/**
+	 * Set customer as VAT exempt if the cookie is present (and other conditions met).
+	 */
+	public function maybe_set_vat_exemption() {
+		if ( ! WC()->customer ) {
+			return;
 		}
 
-		return $value;
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_REQUEST['wc-ajax'] ) && 'update_order_review' === $_REQUEST['wc-ajax'] ) {
+			return;
+		}
+
+		$cookie_set    = ! empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] );
+		$customer      = WC()->customer;
+		$countries     = new WC_Countries();
+		$country       = $customer->get_billing_country();
+		$eu_countries  = $countries->get_european_union_countries( 'eu_vat' );
+		$is_eu         = in_array( $country, $eu_countries, true );
+		$should_exempt = $cookie_set && $is_eu;
+
+		$this->set_vat_exemption( $customer, $should_exempt );
 	}
 }
