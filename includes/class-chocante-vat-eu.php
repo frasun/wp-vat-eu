@@ -223,7 +223,6 @@ class Chocante_VAT_EU {
 	 * @return string
 	 */
 	private function get_validation_error( $error, $fields ) {
-		error_log( print_r( $fields, true ) );
 		switch ( $error ) {
 			case 'MISSING_VAT_ID':
 				// translators: Missing Tax ID.
