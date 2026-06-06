@@ -26,7 +26,7 @@ if ( ! defined( 'MAIN_PLUGIN_FILE' ) ) {
 define( 'CHOCANTE_VAT_EU_VERSION', '1.1.0' );
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-chocante-vat-eu.php';
-add_action( 'plugins_loaded', 'chocante_vat_eu_init', 10 );
+add_action( 'plugins_loaded', 'chocante_vat_eu_init', 1 );
 
 /**
  * Load text domain

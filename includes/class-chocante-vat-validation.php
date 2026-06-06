@@ -226,8 +226,20 @@ class Chocante_VAT_Validation {
 	 * @param string $country Country code.
 	 * @return bool
 	 */
-	private function validate_country( $country = '' ) {
+	public function validate_country( $country = '' ) {
 		return isset( self::EU_COUNTRY_LIST[ $country ] );
+	}
+
+	/**
+	 * Validate VAT ID pattern
+	 *
+	 * @param string $country Country code.
+	 * @param string $vat_id VAT number.
+	 * @return bool
+	 */
+	public function validate_pattern( $country, $vat_id ) {
+		$vat_number = $this->split_vat_id( $country, $vat_id );
+		return preg_match( self::EU_COUNTRY_LIST[ $country ]['pattern'], $vat_number );
 	}
 
 	/**
