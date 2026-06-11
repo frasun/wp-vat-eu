@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VAT EU
  * Description: Validate European Union VAT number.
- * Version: 1.1.1
+ * Version: 1.2.0
  * Author: Chocante
  * Text Domain: chocante-vat-eu
  * Domain Path: /languages

@@ -205,6 +205,11 @@ class Chocante_VAT_EU {
 				}
 
 				$customer->update_meta_data( self::TAX_ID, $validated_tax_id );
+
+				if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
+					return;
+				}
+
 				$is_vat_exempt = $this->validate_eu_company( $validated_tax_id, $company_name, $country );
 			}
 
@@ -250,10 +255,10 @@ class Chocante_VAT_EU {
 				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), __( 'VAT / Tax ID', 'chocante-vat-eu' ) );
 			case 'MISSING_COUNTRY':
 				// translators: Missing country.
-				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), __( 'Company name', 'woocommerce' ) );
+				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), __( 'Country / Region', 'woocommerce' ) );
 			case 'MISSING_COMPANY_NAME':
 				// translators: Missing company name.
-				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), __( 'Country / Region', 'woocommerce' ) );
+				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), __( 'Company name', 'woocommerce' ) );
 			case 'INCORRECT_FORMAT':
 				// translators: Incorrect Tax ID format.
 				return sprintf( __( 'Field %s has incorrect format.', 'chocante-vat-eu' ), __( 'VAT / Tax ID', 'chocante-vat-eu' ) );
@@ -399,6 +404,10 @@ class Chocante_VAT_EU {
 			$customer->update_meta_data( self::TAX_ID, $post_tax_id );
 		}
 
+		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
+			return;
+		}
+
 		if ( $post_company ) {
 			$customer->set_billing_company( $post_company );
 		}
@@ -441,7 +450,27 @@ class Chocante_VAT_EU {
 	 * @param bool        $is_vat_exempt Has VAT exemption.
 	 */
 	public function set_vat_exemption( $customer, $is_vat_exempt ) {
+		/**
+		 * Whether to set VAT exemption on the customer.
+		 *
+		 * @param bool $skip Whether to skip setting VAT exemption. Default true.
+		 * @return bool
+		 */
+		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
+			return;
+		}
+
 		$customer->set_is_vat_exempt( $is_vat_exempt );
+
+		/**
+		 * Whether to persist VAT exemption status via cookie.
+		 *
+		 * @param bool $skip Whether to skip setting the cookie. Default true.
+		 * @return bool
+		 */
+		if ( ! apply_filters( 'wp_vat_eu_use_vat_exempt_cookie', true ) ) {
+			return;
+		}
 
 		if ( ( $is_vat_exempt && ! empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] ) ) || ( ! $is_vat_exempt && empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] ) ) ) {
 			return;
@@ -459,6 +488,10 @@ class Chocante_VAT_EU {
 	 * @param int|object $user       User.
 	 */
 	public function set_cookie_on_login( $user_login, $user ) {
+		if ( ! apply_filters( 'wp_vat_eu_use_vat_exempt_cookie', true ) ) {
+			return;
+		}
+
 		$customer      = new WC_Customer( $user->ID, true );
 		$tax_id        = $customer->get_meta( self::TAX_ID );
 		$company_name  = $customer->get_billing_company();
@@ -472,6 +505,10 @@ class Chocante_VAT_EU {
 	 * Delete VAT exempt cookie on user logout
 	 */
 	public function delete_cookie_on_logout() {
+		if ( ! apply_filters( 'wp_vat_eu_use_vat_exempt_cookie', true ) ) {
+			return;
+		}
+
 		$this->set_vat_exemption( WC()->customer, false );
 	}
 
@@ -479,6 +516,10 @@ class Chocante_VAT_EU {
 	 * Set customer as VAT exempt if the cookie is present (and other conditions met).
 	 */
 	public function maybe_set_vat_exemption() {
+		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
+			return;
+		}
+
 		if ( ! WC()->customer ) {
 			return;
 		}
@@ -497,11 +538,13 @@ class Chocante_VAT_EU {
 			$company       = $customer->get_billing_company();
 			$should_exempt = $this->validate_eu_company( $tax_id, $company, $country );
 		} else {
-			$cookie_set    = ! empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] );
-			$countries     = new WC_Countries();
-			$eu_countries  = $countries->get_european_union_countries( 'eu_vat' );
-			$is_eu         = in_array( $country, $eu_countries, true );
-			$should_exempt = $cookie_set && $is_eu;
+			$cookie_set         = apply_filters( 'wp_vat_eu_use_vat_exempt_cookie', true ) ? ! empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] ) : true;
+			$countries          = new WC_Countries();
+			$eu_countries       = $countries->get_european_union_countries( 'eu_vat' );
+			$is_eu              = in_array( $country, $eu_countries, true );
+			$base_country       = $countries->get_base_country();
+			$base_country_in_eu = in_array( $base_country, $eu_countries, true ) && $base_country === $country;
+			$should_exempt      = $cookie_set && $is_eu && ! $base_country_in_eu;
 		}
 
 		$this->set_vat_exemption( $customer, $should_exempt );
@@ -521,11 +564,19 @@ class Chocante_VAT_EU {
 		$countries        = new WC_Countries();
 		$eu_vat_countries = $countries->get_european_union_countries( 'eu_vat' );
 
+		/**
+		 * Choose the location of Tax ID field in block checkout.
+		 *
+		 * @param string $location Block checkout group (contact|address|order). Default order.
+		 * @return string
+		 */
+		$field_location = apply_filters( 'wp_vat_eu_block_checkout_location', 'order' );
+
 		woocommerce_register_additional_checkout_field(
 			array(
 				'id'       => self::TAX_ID_FIELD,
 				'label'    => __( 'VAT / Tax ID', 'chocante-vat-eu' ),
-				'location' => 'order',
+				'location' => $field_location,
 				'required' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -640,6 +691,10 @@ class Chocante_VAT_EU {
 	 * @param WC_Customer $customer Customer object.
 	 */
 	public function set_vat_exempt_on_store_api_customer_update( $customer ) {
+		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
+			return;
+		}
+
 		$changes = $customer->get_changes();
 
 		if ( isset( $changes['billing']['company'] ) || isset( $changes['billing']['country'] ) ) {
@@ -661,6 +716,10 @@ class Chocante_VAT_EU {
 	 * @param WP_REST_Request $request Full details about the request.
 	 */
 	public function set_vat_exempt_on_store_api_order_update( $order, $request ) {
+		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
+			return;
+		}
+
 		if ( isset( $request->get_param( 'additional_fields' )[ self::TAX_ID_FIELD ] ) ) {
 			$customer         = wc()->customer;
 			$session_customer = $customer->get_changes();

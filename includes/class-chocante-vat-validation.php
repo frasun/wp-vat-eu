@@ -282,10 +282,21 @@ class Chocante_VAT_Validation {
 			return false;
 		}
 
-		// External validator.
+		/**
+		 * Use external validation function instead of calling VIES API
+		 *
+		 * @param null $is_valid Validated result.
+		 * @param string $vat_number VAT number.
+		 * @return bool
+		 *
+		 * @example
+		 * add_filter('wp_vat_eu_validator_DE', function ($is_valid, $vat_number) {
+		 *  return preg_match(/\d{9}/, $vat_number);
+		 * }, 10, 2);
+		 */
 		$external = apply_filters( 'wp_vat_eu_validator_' . $country, null, $vat_number );
 
-		if ( isset( $external ) ) {
+		if ( ! is_null( $external ) ) {
 			return $external ? $vat_id : $external;
 		}
 
@@ -321,7 +332,16 @@ class Chocante_VAT_Validation {
 		// API limit issue.
 		if ( 'MS_MAX_CONCURRENT_REQ' === $res_arr['userError'] ) {
 			$this->error = $res_arr['userError'];
-			return false;
+			/**
+			 * Skip when VIES API returns a rate limit error
+			 *
+			 * @param bool $skip_rate_limit_error Whether to skip the rate limit error. Default false.
+			 * @return bool
+			 *
+			 * @example
+			 * add_filter('wp_vat_eu_skip_api_rate_limit', '__return_true');
+			 */
+			return apply_filters( 'wp_vat_eu_skip_api_rate_limit', false );
 		}
 
 		// Not valid VAT number.
