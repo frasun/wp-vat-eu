@@ -14,33 +14,36 @@ use Automattic\WooCommerce\Blocks\Domain\Services\CheckoutFields;
  * The Chocante_VAT_EU class.
  */
 class Chocante_VAT_EU {
-	/**
-	 * This class instance.
-	 *
-	 * @var \Chocante_VAT_EU Single instance of this class.
-	 */
-	private static $instance;
+	// Meta field.
+	const TAX_ID = 'billing_tax_id';
+	// Checkout field.
+	const TAX_ID_FIELD = 'chocante_vat_eu/tax_id';
+	// Cookie.
+	const VAT_EXEMPT_COOKIE = 'chocante_vat_exempt';
+	// Validation errors.
+	const ERROR_MISSING_COMPANY = 'MISSING_COMPANY_NAME';
+	const ERROR_INVALID         = 'INVALID';
 
 	/**
-	 * The current version of the plugin.
+	 * Current version of the plugin.
 	 *
 	 * @var string The current version of the plugin.
 	 */
 	public $version;
 
 	/**
+	 * Class instance.
+	 *
+	 * @var Chocante_VAT_EU Single instance of this class.
+	 */
+	private static $instance;
+
+	/**
 	 * VAT Validation class
 	 *
 	 * @var Chocante_VAT_Validation
 	 */
-	private $validator;
-
-	/**
-	 * Checkout Fields
-	 *
-	 * @var CheckoutFields
-	 */
-	private $checkout_fields;
+	protected $validator;
 
 	/**
 	 * Customer Tax ID holder
@@ -50,11 +53,11 @@ class Chocante_VAT_EU {
 	private $customer_tax_id;
 
 	/**
-	 * Field name
+	 * Validation error
+	 *
+	 * @var string|null
 	 */
-	const TAX_ID            = 'billing_tax_id';
-	const TAX_ID_FIELD      = 'chocante_vat_eu/tax_id';
-	const VAT_EXEMPT_COOKIE = 'chocante_vat_exempt';
+	public $error;
 
 	/**
 	 * Constructor
@@ -92,7 +95,7 @@ class Chocante_VAT_EU {
 	 *
 	 * Ensures only one instance can be loaded.
 	 *
-	 * @return \Chocante_VAT_EU
+	 * @return Chocante_VAT_EU
 	 */
 	public static function instance() {
 		if ( null === self::$instance ) {
@@ -132,17 +135,15 @@ class Chocante_VAT_EU {
 		// Add front-end validation to checkout.
 		add_action( 'woocommerce_before_checkout_form', array( $this, 'add_client_checkout_validation' ) );
 
-		// Display prices without VAT.
+		// Set VAT exemption.
 		add_action( 'wp', array( $this, 'maybe_set_vat_exemption' ) );
-		add_action( 'wp_login', array( $this, 'set_cookie_on_login' ), 10, 2 );
-		add_action( 'wp_logout', array( $this, 'delete_cookie_on_logout' ) );
 
 		// Add field to block checkout.
 		add_action( 'woocommerce_init', array( $this, 'init_block_checkout' ) );
 		add_filter( 'woocommerce_get_default_value_for_' . self::TAX_ID_FIELD, array( $this, 'populate_tax_id_in_block_checkout' ), 10, 3 );
 		add_action( 'woocommerce_set_additional_field_value', array( $this, 'set_session_tax_id' ), 10, 2 );
 		add_filter( 'woocommerce_sanitize_additional_field', array( $this, 'sanitize_tax_id_field' ), 10, 2 );
-		add_action( 'woocommerce_checkout_validate_order_before_payment', array( $this, 'validate_tax_id_field_on_payment' ), 10, 2 );
+		add_action( 'woocommerce_checkout_validate_order_before_payment', array( $this, 'validate_tax_id_field_in_block_checkout' ), 10, 2 );
 
 		// Display company field in address block.
 		add_filter( 'default_option_woocommerce_checkout_company_field', array( $this, 'display_company_field_in_block_checkout' ) );
@@ -186,29 +187,26 @@ class Chocante_VAT_EU {
 			$changes          = $customer->get_changes();
 			$company_name     = $changes['billing']['company'] ?? $current_customer->get_billing_company();
 			$country          = $changes['billing']['country'] ?? $current_customer->get_billing_country();
-			$tax_id           = $customer->get_meta( self::TAX_ID );
+			$tax_id           = $this->validator::sanitize_input( $customer->get_meta( self::TAX_ID ) );
 			$has_company_name = ! empty( $company_name );
 			$has_tax_id       = ! empty( $tax_id );
 			$is_vat_exempt    = false;
 
 			if ( $has_tax_id || $has_company_name ) {
 				if ( ! $has_company_name ) {
-					wc_add_notice( $this->get_validation_error( 'MISSING_COMPANY_NAME' ), 'error' );
+					$this->error = self::ERROR_MISSING_COMPANY;
+					wc_add_notice( $this->get_validation_error(), 'error' );
 					return;
 				}
 
-				$validated_tax_id = $this->validator->validate( $country, $tax_id );
+				$validated_tax_id = $this->validate_vat_number( $country, $tax_id );
 
 				if ( false === $validated_tax_id ) {
-					wc_add_notice( $this->get_validation_error( $this->validator->get_error() ), 'error' );
+					wc_add_notice( $this->get_validation_error(), 'error' );
 					return;
 				}
 
 				$customer->update_meta_data( self::TAX_ID, $validated_tax_id );
-
-				if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
-					return;
-				}
 
 				$is_vat_exempt = $this->validate_eu_company( $validated_tax_id, $company_name, $country );
 			}
@@ -223,18 +221,19 @@ class Chocante_VAT_EU {
 	public function validate_tax_id_in_checkout() {
 		$company_name     = isset( $_POST['billing_company'] ) ? wp_unslash( sanitize_text_field( $_POST['billing_company'] ) ) : ''; // @codingStandardsIgnoreLine.
 		$country          = isset( $_POST['billing_country'] ) ? wp_unslash( sanitize_text_field( $_POST['billing_country'] ) ) : ''; // @codingStandardsIgnoreLine.
-		$tax_id           = isset( $_POST[self::TAX_ID] ) ? wp_unslash( sanitize_text_field( $_POST[self::TAX_ID] ) ) : ''; // @codingStandardsIgnoreLine.
+		$tax_id           = isset( $_POST[self::TAX_ID] ) ? wp_unslash( $this->validator::sanitize_input( $_POST[self::TAX_ID] ) ) : ''; // @codingStandardsIgnoreLine.
 		$has_company_name = ! empty( $company_name );
 		$has_tax_id       = ! empty( $tax_id );
 
 		if ( $has_tax_id ) {
 			if ( ! $has_company_name ) {
-				wc_add_notice( $this->get_validation_error( 'MISSING_COMPANY_NAME' ), 'error' );
+				$this->error = self::ERROR_MISSING_COMPANY;
+				wc_add_notice( $this->get_validation_error(), 'error' );
 			} else {
-				$validated_tax_id = $this->validator->validate( $country, $tax_id );
+				$validated_tax_id = $this->validate_vat_number( $country, $tax_id );
 
 				if ( false === $validated_tax_id ) {
-					wc_add_notice( $this->get_validation_error( $this->validator->get_error() ), 'error' );
+					wc_add_notice( $this->get_validation_error(), 'error' );
 				} else {
 					$_POST[ self::TAX_ID ] = $validated_tax_id;
 				}
@@ -245,24 +244,24 @@ class Chocante_VAT_EU {
 	/**
 	 * Output validation error message
 	 *
-	 * @param string $error Error ID.
 	 * @return string
 	 */
-	private function get_validation_error( $error ) {
-		switch ( $error ) {
-			case 'MISSING_VAT_ID':
+	private function get_validation_error() {
+		switch ( $this->error ) {
+			case Chocante_VAT_Validation::ERROR_MISSING_VAT_ID:
 				// translators: Missing Tax ID.
 				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), __( 'VAT / Tax ID', 'chocante-vat-eu' ) );
-			case 'MISSING_COUNTRY':
+			case Chocante_VAT_Validation::ERROR_MISSING_COUNTRY:
 				// translators: Missing country.
 				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), __( 'Country / Region', 'woocommerce' ) );
-			case 'MISSING_COMPANY_NAME':
+			case self::ERROR_MISSING_COMPANY:
 				// translators: Missing company name.
 				return sprintf( __( 'Please enter %s.', 'chocante-vat-eu' ), __( 'Company name', 'woocommerce' ) );
-			case 'INCORRECT_FORMAT':
+			case Chocante_VAT_Validation::ERROR_INCORRECT_FORMAT:
 				// translators: Incorrect Tax ID format.
 				return sprintf( __( 'Field %s has incorrect format.', 'chocante-vat-eu' ), __( 'VAT / Tax ID', 'chocante-vat-eu' ) );
-			case 'MS_MAX_CONCURRENT_REQ':
+			case Chocante_VAT_Validation::ERROR_RATE_LIMIT:
+			case Chocante_VAT_Validation::ERROR_INVALID:
 				// translators: Service temporarily unavailable.
 				return __( 'Unable to verify VAT / Tax ID. Please wait and try again.', 'chocante-vat-eu' );
 			default:
@@ -404,10 +403,6 @@ class Chocante_VAT_EU {
 			$customer->update_meta_data( self::TAX_ID, $post_tax_id );
 		}
 
-		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
-			return;
-		}
-
 		if ( $post_company ) {
 			$customer->set_billing_company( $post_company );
 		}
@@ -440,7 +435,7 @@ class Chocante_VAT_EU {
 			return false;
 		}
 
-		return $this->validator->validate_vat_format( $country, $tax_id );
+		return $this->validator::validate_vat_format( $country, $tax_id );
 	}
 
 	/**
@@ -450,25 +445,9 @@ class Chocante_VAT_EU {
 	 * @param bool        $is_vat_exempt Has VAT exemption.
 	 */
 	public function set_vat_exemption( $customer, $is_vat_exempt ) {
-		/**
-		 * Whether to set VAT exemption on the customer.
-		 *
-		 * @param bool $skip Whether to skip setting VAT exemption. Default true.
-		 * @return bool
-		 */
-		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
-			return;
-		}
-
 		$customer->set_is_vat_exempt( $is_vat_exempt );
 
-		/**
-		 * Whether to persist VAT exemption status via cookie.
-		 *
-		 * @param bool $skip Whether to skip setting the cookie. Default true.
-		 * @return bool
-		 */
-		if ( ! apply_filters( 'wp_vat_eu_use_vat_exempt_cookie', true ) ) {
+		if ( headers_sent() ) {
 			return;
 		}
 
@@ -482,48 +461,9 @@ class Chocante_VAT_EU {
 	}
 
 	/**
-	 * Set VAT exempt cookie on user login
-	 *
-	 * @param string     $user_login User login.
-	 * @param int|object $user       User.
-	 */
-	public function set_cookie_on_login( $user_login, $user ) {
-		if ( ! apply_filters( 'wp_vat_eu_use_vat_exempt_cookie', true ) ) {
-			return;
-		}
-
-		$customer      = new WC_Customer( $user->ID, true );
-		$tax_id        = $customer->get_meta( self::TAX_ID );
-		$company_name  = $customer->get_billing_company();
-		$country       = $customer->get_billing_country();
-		$is_vat_exempt = $this->validate_eu_company( $tax_id, $company_name, $country );
-
-		$this->set_vat_exemption( $customer, $is_vat_exempt );
-	}
-
-	/**
-	 * Delete VAT exempt cookie on user logout
-	 */
-	public function delete_cookie_on_logout() {
-		if ( ! apply_filters( 'wp_vat_eu_use_vat_exempt_cookie', true ) ) {
-			return;
-		}
-
-		$this->set_vat_exemption( WC()->customer, false );
-	}
-
-	/**
 	 * Set customer as VAT exempt if the cookie is present (and other conditions met).
 	 */
 	public function maybe_set_vat_exemption() {
-		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
-			return;
-		}
-
-		if ( ! WC()->customer ) {
-			return;
-		}
-
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_REQUEST['wc-ajax'] ) && 'update_order_review' === $_REQUEST['wc-ajax'] ) {
 			return;
@@ -532,19 +472,21 @@ class Chocante_VAT_EU {
 		$should_exempt = false;
 		$customer      = wc()->customer;
 		$country       = $customer->get_billing_country();
+		$tax_id        = $customer->get_meta( self::TAX_ID );
+		$company       = $customer->get_billing_company();
+		$should_exempt = $this->validate_eu_company( $tax_id, $company, $country );
 
-		if ( has_block( 'woocommerce/checkout' ) ) {
-			$tax_id        = $customer->get_meta( self::TAX_ID );
-			$company       = $customer->get_billing_company();
-			$should_exempt = $this->validate_eu_company( $tax_id, $company, $country );
-		} else {
-			$cookie_set         = apply_filters( 'wp_vat_eu_use_vat_exempt_cookie', true ) ? ! empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] ) : true;
-			$countries          = new WC_Countries();
-			$eu_countries       = $countries->get_european_union_countries( 'eu_vat' );
-			$is_eu              = in_array( $country, $eu_countries, true );
-			$base_country       = $countries->get_base_country();
-			$base_country_in_eu = in_array( $base_country, $eu_countries, true ) && $base_country === $country;
-			$should_exempt      = $cookie_set && $is_eu && ! $base_country_in_eu;
+		if ( ! $should_exempt && ! is_checkout() ) {
+			$cookie_set = ! empty( $_COOKIE[ self::VAT_EXEMPT_COOKIE ] );
+
+			if ( $cookie_set ) {
+				$countries          = new WC_Countries();
+				$eu_countries       = $countries->get_european_union_countries( 'eu_vat' );
+				$is_eu              = in_array( $country, $eu_countries, true );
+				$base_country       = $countries->get_base_country();
+				$base_country_in_eu = in_array( $base_country, $eu_countries, true ) ? $base_country !== $country : false;
+				$should_exempt      = $is_eu && $base_country_in_eu;
+			}
 		}
 
 		$this->set_vat_exemption( $customer, $should_exempt );
@@ -554,8 +496,6 @@ class Chocante_VAT_EU {
 	 * Add TAX ID field to block checkout
 	 */
 	public function init_block_checkout() {
-		$this->checkout_fields = Package::container()->get( CheckoutFields::class );
-
 		if ( is_user_logged_in() ) {
 			$customer              = new WC_Customer( get_current_user_id() );
 			$this->customer_tax_id = $customer->get_meta( self::TAX_ID );
@@ -564,19 +504,11 @@ class Chocante_VAT_EU {
 		$countries        = new WC_Countries();
 		$eu_vat_countries = $countries->get_european_union_countries( 'eu_vat' );
 
-		/**
-		 * Choose the location of Tax ID field in block checkout.
-		 *
-		 * @param string $location Block checkout group (contact|address|order). Default order.
-		 * @return string
-		 */
-		$field_location = apply_filters( 'wp_vat_eu_block_checkout_location', 'order' );
-
 		woocommerce_register_additional_checkout_field(
 			array(
 				'id'       => self::TAX_ID_FIELD,
 				'label'    => __( 'VAT / Tax ID', 'chocante-vat-eu' ),
-				'location' => $field_location,
+				'location' => 'order',
 				'required' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -650,9 +582,7 @@ class Chocante_VAT_EU {
 	 */
 	public function sanitize_tax_id_field( $field_value, $field_key ) {
 		if ( self::TAX_ID_FIELD === $field_key ) {
-			$field_value = str_replace( array( '.', ',', '-', ' ' ), '', $field_value );
-			$field_value = strtoupper( $field_value );
-			$field_value = filter_var( $field_value, FILTER_UNSAFE_RAW, FILTER_FLAG_STRIP_LOW );
+			$field_value = $this->validator::sanitize_input( $field_value );
 		}
 
 		return $field_value;
@@ -664,18 +594,30 @@ class Chocante_VAT_EU {
 	 * @param WC_Order $order             The order object.
 	 * @param WP_Error $validation_errors WP_Error object to add custom errors to.
 	 */
-	public function validate_tax_id_field_on_payment( $order, $validation_errors ) {
-		$country          = $order->get_billing_country();
-		$tax_id           = $this->checkout_fields->get_field_from_object( self::TAX_ID_FIELD, $order, 'other' );
-		$validated_tax_id = $this->validator->validate( $country, $tax_id );
+	public function validate_tax_id_field_in_block_checkout( $order, $validation_errors ) {
+		$checkout_fields = Package::container()->get( CheckoutFields::class );
+		$tax_id          = $checkout_fields->get_field_from_object( self::TAX_ID_FIELD, $order, 'other' );
+
+		if ( empty( $tax_id ) ) {
+			return;
+		}
+
+		if ( ! ( empty( $tax_id ) ) && empty( $order->get_billing_company() ) ) {
+			$this->error = self::ERROR_MISSING_COMPANY;
+			$validation_errors->add( $this->error, $this->get_validation_error() );
+			return;
+		}
+
+		$validated_tax_id = $this->validate_vat_number( $order->get_billing_country(), $tax_id );
 
 		if ( false === $validated_tax_id ) {
-			$error = $this->validator->get_error();
-			$validation_errors->add( $error, $this->get_validation_error( $error ) );
-		} else {
-			$order->update_meta_data( CheckoutFields::get_group_key( 'other' ) . self::TAX_ID_FIELD, $validated_tax_id );
-			$order->save();
+			$this->error = $this->validator->get_error();
+			$validation_errors->add( $this->error, $this->get_validation_error() );
+			return;
 		}
+
+		$order->update_meta_data( CheckoutFields::get_group_key( 'other' ) . self::TAX_ID_FIELD, $validated_tax_id );
+		$order->save();
 	}
 
 	/**
@@ -691,19 +633,21 @@ class Chocante_VAT_EU {
 	 * @param WC_Customer $customer Customer object.
 	 */
 	public function set_vat_exempt_on_store_api_customer_update( $customer ) {
-		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
-			return;
-		}
-
 		$changes = $customer->get_changes();
 
 		if ( isset( $changes['billing']['company'] ) || isset( $changes['billing']['country'] ) ) {
-			$country       = $changes['billing']['country'] ?? $customer->get_billing_country();
-			$company       = $changes['billing']['company'] ?? $customer->get_billing_company();
-			$order_id      = absint( WC()->session->get( 'store_api_draft_order' ) );
-			$order         = $order_id ? wc_get_order( $order_id ) : null;
-			$tax_id        = $this->checkout_fields->get_field_from_object( self::TAX_ID_FIELD, $order, 'other' );
-			$should_exempt = $this->validate_eu_company( $tax_id, $company, $country );
+			$country  = $changes['billing']['country'] ?? $customer->get_billing_country();
+			$company  = $changes['billing']['company'] ?? $customer->get_billing_company();
+			$order_id = absint( WC()->session->get( 'store_api_draft_order' ) );
+			$order    = $order_id ? wc_get_order( $order_id ) : null;
+
+			if ( empty( $order ) ) {
+				return;
+			}
+
+			$checkout_fields = Package::container()->get( CheckoutFields::class );
+			$tax_id          = $checkout_fields->get_field_from_object( self::TAX_ID_FIELD, $order, 'other' );
+			$should_exempt   = $this->validate_eu_company( $tax_id, $company, $country );
 
 			$this->set_vat_exemption( $customer, $should_exempt );
 		}
@@ -716,16 +660,12 @@ class Chocante_VAT_EU {
 	 * @param WP_REST_Request $request Full details about the request.
 	 */
 	public function set_vat_exempt_on_store_api_order_update( $order, $request ) {
-		if ( ! apply_filters( 'wp_vat_eu_set_vat_exempt', true ) ) {
-			return;
-		}
-
 		if ( isset( $request->get_param( 'additional_fields' )[ self::TAX_ID_FIELD ] ) ) {
 			$customer         = wc()->customer;
 			$session_customer = $customer->get_changes();
 			$country          = $session_customer['billing']['country'] ?? $customer->get_billing_country();
 			$company          = $session_customer['billing']['company'] ?? $customer->get_billing_company();
-			$tax_id           = $this->checkout_fields->get_field_from_object( self::TAX_ID_FIELD, $order, 'other' );
+			$tax_id           = $request->get_param( 'additional_fields' )[ self::TAX_ID_FIELD ];
 			$should_exempt    = $this->validate_eu_company( $tax_id, $company, $country );
 
 			$this->set_vat_exemption( $customer, $should_exempt );
@@ -738,7 +678,8 @@ class Chocante_VAT_EU {
 	 * @param WC_Order $order Order object.
 	 */
 	public function set_vat_id_on_customer( $order ) {
-		$tax_id = $this->checkout_fields->get_field_from_object( self::TAX_ID_FIELD, $order, 'other' );
+		$checkout_fields = Package::container()->get( CheckoutFields::class );
+		$tax_id          = $checkout_fields->get_field_from_object( self::TAX_ID_FIELD, $order, 'other' );
 
 		if ( empty( $tax_id ) ) {
 			return;
@@ -775,10 +716,10 @@ class Chocante_VAT_EU {
 
 		$orders = wc_get_orders(
 			array(
-				'customer_id' => $email,
-				'limit'       => 1,
-				'orderby'     => 'date',
-				'order'       => 'DESC',
+				'customer' => $email,
+				'limit'    => 1,
+				'orderby'  => 'date',
+				'order'    => 'DESC',
 			)
 		);
 
@@ -800,5 +741,56 @@ class Chocante_VAT_EU {
 	 */
 	private function is_block_checkout() {
 		return is_checkout() && has_block( 'woocommerce/checkout' ) && ! is_order_received_page();
+	}
+
+	/**
+	 * Validate VAT number
+	 *
+	 * @param string $country Country code.
+	 * @param string $vat_number VAT number.
+	 * @return bool
+	 */
+	public function validate_vat_number( $country, $vat_number ) {
+		/**
+		 * Use external validation function instead of calling VIES API
+		 *
+		 * @param null $is_valid Validated result.
+		 * @param string $vat_number VAT number.
+		 * @return bool
+		 *
+		 * @example
+		 * add_filter('wp_vat_eu_validator_DE', function ($is_valid, $vat_number) {
+		 *  return preg_match(/\d{9}/, $vat_number);
+		 * }, 10, 2);
+		 */
+		$external = apply_filters( 'wp_vat_eu_validator_' . $country, null, $vat_number );
+
+		if ( ! is_null( $external ) ) {
+			if ( false === $external ) {
+				$this->error = self::ERROR_INVALID;
+				return false;
+			}
+
+			return $vat_number;
+		}
+
+		$validated = $this->validator->validate( $country, $vat_number );
+
+		if ( false === $validated ) {
+			$this->error = $this->validator->get_error();
+
+			/**
+			 * Skip when VIES API returns a rate limit error
+			 *
+			 * @param bool $skip_rate_limit_error Whether to skip the rate limit error. Default false.
+			 * @return bool
+			 */
+			if ( Chocante_VAT_Validation::ERROR_RATE_LIMIT === $this->error && apply_filters( 'wp_vat_eu_skip_api_rate_limit', false ) ) {
+				$this->error = null;
+				return $vat_number;
+			}
+		}
+
+		return $validated;
 	}
 }

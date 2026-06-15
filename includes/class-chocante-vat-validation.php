@@ -1,28 +1,15 @@
 <?php
 /**
  * EU VAT Validation
- * Based on SunVatChecker Class
  *
- * @category  Vat Validation
- * @package   Chocante_VAT_Validation
- * @author    Mehmet Selcuk Batal <batalms@gmail.com>
- * @copyright Copyright (c) 2022, Sunhill Technology <www.sunhillint.com>
- * @license   https://opensource.org/licenses/lgpl-3.0.html The GNU Lesser General Public License, version 3.0
- * @link      https://github.com/msbatal/PHP-EU-VAT-Number-Validation
- * @version   1.1.3
+ * @package Chocante_VAT_Validation
  */
 
 /**
  * The Chocante_VAT_Validation class.
  */
 class Chocante_VAT_Validation {
-
-	/**
-	 * EU Country List
-	 *
-	 * @var array
-	 */
-	protected const EU_COUNTRY_LIST = array(
+	private const EU_COUNTRY_LIST = array(
 		// Austria.
 		'AT' => array(
 			'length'  => 9,
@@ -160,19 +147,25 @@ class Chocante_VAT_Validation {
 		),
 	);
 
-	/**
-	 * Error details
-	 *
-	 * @var string
-	 */
-	private $error = null;
+	const ERROR_MISSING_VAT_ID   = 'MISSING_VAT_ID';
+	const ERROR_MISSING_COUNTRY  = 'MISSING_COUNTRY';
+	const ERROR_INCORRECT_FORMAT = 'INCORRECT_FORMAT';
+	const ERROR_RATE_LIMIT       = 'MS_MAX_CONCURRENT_REQ';
+	const ERROR_INVALID          = 'INVALID_JSON_RESPONSE';
 
 	/**
 	 * VIES API URL
 	 *
 	 * @var string
 	 */
-	protected $api_url = 'https://ec.europa.eu/taxation_customs/vies/rest-api/ms/$1/vat/$2';
+	private $api_url = 'https://ec.europa.eu/taxation_customs/vies/rest-api/ms/$1/vat/$2';
+
+	/**
+	 * Error details
+	 *
+	 * @var string
+	 */
+	protected $error = null;
 
 	/**
 	 * Remove country code from VAT number (if consists)
@@ -181,12 +174,11 @@ class Chocante_VAT_Validation {
 	 * @param string $vat_id VAT number.
 	 * @return string
 	 */
-	private function split_vat_id( $country, $vat_id = '' ) {
-		$vat_id = $this->filter_argument( $vat_id );
+	private static function split_vat_id( $country, $vat_id = '' ) {
 		if ( 'FR' === $country ) {
 			$vat_number = substr( $vat_id, -self::EU_COUNTRY_LIST[ $country ]['length'], self::EU_COUNTRY_LIST[ $country ]['length'] );
 		} elseif ( ctype_alpha( substr( $vat_id, 0, 2 ) ) ) {
-				$vat_number = substr( $vat_id, 2 );
+			$vat_number = substr( $vat_id, 2 );
 		} else {
 			$vat_number = $vat_id;
 		}
@@ -200,24 +192,12 @@ class Chocante_VAT_Validation {
 	 * @param string $argument Raw string.
 	 * @return string
 	 */
-	private function filter_argument( $argument = '' ) {
-		$argument = str_replace( array( '.', ',', '-', ' ' ), '', $argument );
+	public static function sanitize_input( $argument ) {
+		$argument = preg_replace( '/[^a-zA-Z0-9]/', '', $argument );
+		$argument = strtoupper( $argument );
+		$argument = filter_var( $argument, FILTER_UNSAFE_RAW, FILTER_FLAG_STRIP_LOW );
 
-		return filter_var( $argument, FILTER_UNSAFE_RAW, FILTER_FLAG_STRIP_LOW );
-	}
-
-	/**
-	 * Validate data to prevent XSS and nasty things
-	 *
-	 * @param string $argument VAT number.
-	 * @return bool
-	 */
-	private function validate_argument( $argument = '' ) {
-		$regexp = '/^[a-zA-Z0-9\s\.\-,&\+\(\)\/º\pL]+$/u';
-		if ( filter_var( $argument, FILTER_VALIDATE_REGEXP, array( 'options' => array( 'regexp' => $regexp ) ) ) === false ) {
-			return false;
-		}
-		return true;
+		return $argument;
 	}
 
 	/**
@@ -226,20 +206,37 @@ class Chocante_VAT_Validation {
 	 * @param string $country Country code.
 	 * @return bool
 	 */
-	public function validate_country( $country = '' ) {
-		return isset( self::EU_COUNTRY_LIST[ $country ] );
+	private static function validate_country( $country ) {
+		return isset( $country, self::EU_COUNTRY_LIST[ $country ] );
 	}
 
 	/**
 	 * Validate VAT ID pattern
 	 *
 	 * @param string $country Country code.
-	 * @param string $vat_id VAT number.
+	 * @param string $vat_number VAT number.
 	 * @return bool
 	 */
-	public function validate_pattern( $country, $vat_id ) {
-		$vat_number = $this->split_vat_id( $country, $vat_id );
-		return preg_match( self::EU_COUNTRY_LIST[ $country ]['pattern'], $vat_number );
+	private static function validate_pattern( $country, $vat_number ) {
+		$country_pattern = self::EU_COUNTRY_LIST[ $country ];
+
+		return strlen( $vat_number ) === $country_pattern['length'] && preg_match( $country_pattern['pattern'], $vat_number );
+	}
+
+	/**
+	 * Check if EU country VAT
+	 *
+	 * @param string $country Country code.
+	 * @param string $vat_id EU VAT number.
+	 * @return bool
+	 */
+	public static function validate_vat_format( $country, $vat_id ) {
+		if ( ! self::validate_country( $country ) ) {
+			return false;
+		}
+
+		$vat_number = self::split_vat_id( $country, strtoupper( $vat_id ) );
+		return self::validate_pattern( $country, $vat_number );
 	}
 
 	/**
@@ -247,106 +244,57 @@ class Chocante_VAT_Validation {
 	 *
 	 * @param string $country Country code.
 	 * @param string $vat_id VAT number.
+	 * @throws Error API error.
 	 * @return bool
 	 */
-	public function validate( $country = '', $vat_id = '' ) {
-		// Missing data.
+	public function validate( $country, $vat_id ) {
+		// Missing vat id.
 		if ( empty( $vat_id ) ) {
-			$this->error = 'MISSING_VAT_ID';
+			$this->error = self::ERROR_MISSING_VAT_ID;
 			return false;
 		}
 
 		// Missing country code.
 		if ( empty( $country ) ) {
-			$this->error = 'MISSING_COUNTRY';
+			$this->error = self::ERROR_MISSING_COUNTRY;
 			return false;
 		}
 
 		// Non-EU country.
-		if ( $this->validate_country( $country ) === false ) {
+		if ( false === self::validate_country( $country ) ) {
 			return $vat_id;
 		}
 
-		$vat_number = $this->split_vat_id( $country, strtoupper( $vat_id ) );
+		// Incorrect VAT number format.
+		if ( ! $this::validate_vat_format( $country, $vat_id ) ) {
+			$this->error = self::ERROR_INCORRECT_FORMAT;
+			return false;
+		}
+
+		$vat_number = self::split_vat_id( $country, strtoupper( $vat_id ) );
 		$vat_id     = $country . $vat_number;
 
-		if ( ! preg_match( self::EU_COUNTRY_LIST[ $country ]['pattern'], $vat_number ) ) {
-			// Incorrect VAT number.
-			$this->error = 'INCORRECT_FORMAT';
-			return false;
-		}
-
-		if ( ! $this->validate_argument( $vat_id ) ) {
-			// Incorrect VAT number.
-			$this->error = 'INCORRECT_FORMAT';
-			return false;
-		}
-
-		/**
-		 * Use external validation function instead of calling VIES API
-		 *
-		 * @param null $is_valid Validated result.
-		 * @param string $vat_number VAT number.
-		 * @return bool
-		 *
-		 * @example
-		 * add_filter('wp_vat_eu_validator_DE', function ($is_valid, $vat_number) {
-		 *  return preg_match(/\d{9}/, $vat_number);
-		 * }, 10, 2);
-		 */
-		$external = apply_filters( 'wp_vat_eu_validator_' . $country, null, $vat_number );
-
-		if ( ! is_null( $external ) ) {
-			return $external ? $vat_id : $external;
-		}
-
 		try {
-			$query = str_replace( array( '$1', '$2' ), array( $country, $vat_number ), $this->api_url );
-			// $result = wp_remote_get( $query );
-			// Handle modern server config.
-			$result = $this->safe_remote_get( $query );
-
-			// API request error.
-			if ( is_wp_error( $result ) ) {
-				$this->error = $result->get_error_message();
-				return false;
-			}
-
+			$query   = str_replace( array( '$1', '$2' ), array( $country, $vat_number ), $this->api_url );
+			$result  = $this->call_vies_api( $query );
 			$res_arr = json_decode( $result, true );
 
 			if ( ! is_array( $res_arr ) ) {
-				$this->error = 'INVALID_JSON_RESPONSE';
-				return false;
+				throw new Error( self::ERROR_INVALID );
 			}
-		} catch ( Exception $ex ) {
-			// API exception.
+
+			// Invalid VAT number / API rate limit error.
+			if ( false === $res_arr['isValid'] ) {
+				throw new Error( $res_arr['userError'] );
+			}
+		} catch ( Throwable $ex ) {
+			// API request error.
 			$this->error = $ex->getMessage();
 			return false;
 		}
 
 		// VAT number valid.
-		if ( true === $res_arr['isValid'] ) {
-			return $vat_id;
-		}
-
-		// API limit issue.
-		if ( 'MS_MAX_CONCURRENT_REQ' === $res_arr['userError'] ) {
-			$this->error = $res_arr['userError'];
-			/**
-			 * Skip when VIES API returns a rate limit error
-			 *
-			 * @param bool $skip_rate_limit_error Whether to skip the rate limit error. Default false.
-			 * @return bool
-			 *
-			 * @example
-			 * add_filter('wp_vat_eu_skip_api_rate_limit', '__return_true');
-			 */
-			return apply_filters( 'wp_vat_eu_skip_api_rate_limit', false );
-		}
-
-		// Not valid VAT number.
-		$this->error = $res_arr['userError'];
-		return false;
+		return $vat_id;
 	}
 
 	/**
@@ -359,36 +307,16 @@ class Chocante_VAT_Validation {
 	}
 
 	/**
-	 * Check if EU country VAT
-	 *
-	 * @param string $country Country code.
-	 * @param string $vat_id EU VAT number.
-	 * @return bool
-	 */
-	public function validate_vat_format( $country, $vat_id ) {
-		if ( false === $this->validate_country( $country ) ) {
-			return false;
-		}
-
-		$vat_number = $this->split_vat_id( $country, strtoupper( $vat_id ) );
-
-		if ( strlen( $vat_number ) !== self::EU_COUNTRY_LIST[ $country ]['length'] ) {
-			return false;
-		}
-
-		return preg_match( self::EU_COUNTRY_LIST[ $country ]['pattern'], $vat_number );
-	}
-
-	/**
-	 * Fetch data using CURL directly intead of wp_remote_get
+	 * Call VIES API
 	 *
 	 * @param string $url URL to fetch data.
+	 * @throws Error API error.
+	 * @return string
 	 */
-	private function safe_remote_get( $url ) {
-		// phpcs:ignore
+	protected function call_vies_api( $url ) {
+		// phpcs:disable
 		$ch = curl_init();
 
-		// phpcs:ignore
 		curl_setopt_array(
 			$ch,
 			array(
@@ -397,29 +325,26 @@ class Chocante_VAT_Validation {
 				CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
 				CURLOPT_SSLVERSION     => 6,
 				CURLOPT_SSL_OPTIONS    => 128,
-				// phpcs:ignore
-				// CURLOPT_SSL_CIPHER_LIST => 'DEFAULT@SECLEVEL=1',
 				CURLOPT_USERAGENT      => 'curl/7.81.0',
 				CURLOPT_TIMEOUT        => 20,
 				CURLOPT_CONNECTTIMEOUT => 10,
 			)
 		);
 
-		// phpcs:ignore
 		$response  = curl_exec( $ch );
-		// phpcs:ignore
 		$error     = curl_error( $ch );
-		// phpcs:ignore
 		$http_code = curl_getinfo( $ch, CURLINFO_HTTP_CODE );
-		// phpcs:ignore
 		curl_close( $ch );
+		// phpcs:enable
 
 		if ( $error ) {
-			return new WP_Error( 'vies_curl_error', $error );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new Error( htmlspecialchars( $error ) );
 		}
 
 		if ( 200 !== $http_code ) {
-			return new WP_Error( 'vies_http_error', 'HTTP Code: ' . $http_code );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new Error( htmlspecialchars( 'HTTP Code: ' . $http_code ) );
 		}
 
 		return $response;

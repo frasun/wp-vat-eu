@@ -1,0 +1,8 @@
+{
+	"core": null,
+	"plugins": [
+		"https://downloads.wordpress.org/plugin/woocommerce.latest-stable.zip",
+		"."
+	],
+	"autoPort": true
+}
