@@ -457,7 +457,7 @@ class Chocante_VAT_EU {
 	 */
 	public function maybe_set_vat_exemption() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( isset( $_REQUEST['wc-ajax'] ) && 'update_order_review' === $_REQUEST['wc-ajax'] ) {
+		if ( ( isset( $_REQUEST['wc-ajax'] ) && 'update_order_review' === $_REQUEST['wc-ajax'] ) || is_admin() ) {
 			return;
 		}
 
