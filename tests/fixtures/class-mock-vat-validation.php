@@ -31,6 +31,6 @@ class Mock_VAT_Validation extends Chocante_VAT_Validation {
 			return false;
 		}
 
-		return self::MOCK_TAX_ID;
+		return true;
 	}
 }

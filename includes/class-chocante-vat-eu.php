@@ -206,8 +206,6 @@ class Chocante_VAT_EU {
 					return;
 				}
 
-				$customer->update_meta_data( self::TAX_ID, $validated_tax_id );
-
 				$is_vat_exempt = $this->validate_eu_company( $validated_tax_id, $company_name, $country );
 			}
 
@@ -234,8 +232,6 @@ class Chocante_VAT_EU {
 
 				if ( false === $validated_tax_id ) {
 					wc_add_notice( $this->get_validation_error(), 'error' );
-				} else {
-					$_POST[ self::TAX_ID ] = $validated_tax_id;
 				}
 			}
 		}
@@ -260,10 +256,6 @@ class Chocante_VAT_EU {
 			case Chocante_VAT_Validation::ERROR_INCORRECT_FORMAT:
 				// translators: Incorrect Tax ID format.
 				return sprintf( __( 'Field %s has incorrect format.', 'chocante-vat-eu' ), __( 'VAT / Tax ID', 'chocante-vat-eu' ) );
-			case Chocante_VAT_Validation::ERROR_RATE_LIMIT:
-			case Chocante_VAT_Validation::ERROR_INVALID:
-				// translators: Service temporarily unavailable.
-				return __( 'Unable to verify VAT / Tax ID. Please wait and try again.', 'chocante-vat-eu' );
 			default:
 				// translators: Invalid Tax ID.
 				return __( 'VAT / Tax ID is invalid.', 'chocante-vat-eu' );
@@ -615,9 +607,6 @@ class Chocante_VAT_EU {
 			$validation_errors->add( $this->error, $this->get_validation_error() );
 			return;
 		}
-
-		$order->update_meta_data( CheckoutFields::get_group_key( 'other' ) . self::TAX_ID_FIELD, $validated_tax_id );
-		$order->save();
 	}
 
 	/**
@@ -751,26 +740,9 @@ class Chocante_VAT_EU {
 	 * @return bool
 	 */
 	public function validate_vat_number( $country, $vat_number ) {
-		/**
-		 * Use external validation function instead of calling VIES API
-		 *
-		 * @param null $is_valid Validated result.
-		 * @param string $vat_number VAT number.
-		 * @return bool
-		 *
-		 * @example
-		 * add_filter('wp_vat_eu_validator_DE', function ($is_valid, $vat_number) {
-		 *  return preg_match(/\d{9}/, $vat_number);
-		 * }, 10, 2);
-		 */
-		$external = apply_filters( 'wp_vat_eu_validator_' . $country, null, $vat_number );
+		$eu_countries = WC()->countries->get_european_union_countries( 'eu_vat' );
 
-		if ( ! is_null( $external ) ) {
-			if ( false === $external ) {
-				$this->error = self::ERROR_INVALID;
-				return false;
-			}
-
+		if ( ! in_array( $country, $eu_countries, true ) ) {
 			return $vat_number;
 		}
 
@@ -778,17 +750,6 @@ class Chocante_VAT_EU {
 
 		if ( false === $validated ) {
 			$this->error = $this->validator->get_error();
-
-			/**
-			 * Skip when VIES API returns a rate limit error
-			 *
-			 * @param bool $skip_rate_limit_error Whether to skip the rate limit error. Default false.
-			 * @return bool
-			 */
-			if ( Chocante_VAT_Validation::ERROR_RATE_LIMIT === $this->error && apply_filters( 'wp_vat_eu_skip_api_rate_limit', false ) ) {
-				$this->error = null;
-				return $vat_number;
-			}
 		}
 
 		return $validated;

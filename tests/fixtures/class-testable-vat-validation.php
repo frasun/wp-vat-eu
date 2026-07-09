@@ -26,13 +26,14 @@ class Testable_VAT_Validation extends Chocante_VAT_Validation {
 	}
 
 	/**
-	 * Mock VIES API call method
+	 * Call VIES API
 	 *
-	 * @param string $url API url.
+	 * @param string $country_code Country code.
+	 * @param string $vat_number VAT number.
 	 * @throws Error API error.
-	 * @return string
+	 * @return array
 	 */
-	protected function call_vies_api( $url ) {
-		return ( $this->http_client )( $url );
+	protected function call_vies_api( $country_code, $vat_number ) {
+		return ( $this->http_client )( $country_code, $vat_number );
 	}
 }

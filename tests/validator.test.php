@@ -59,10 +59,10 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * Test VAT validation
+	 * Test VAT EU validation
 	 */
 	public function test_validation() {
-		$validator = new Testable_VAT_Validation( fn() => '{"isValid":true}' );
+		$validator = new Testable_VAT_Validation( fn() => array( 'valid' => true ) );
 
 		// Missing VAT number & country.
 		$this->assertFalse( $validator->validate( null, null ) );
@@ -81,20 +81,10 @@ class ValidatorTest extends TestCase {
 		$this->assertSame( $validator->get_error(), 'INCORRECT_FORMAT' );
 
 		// Non-EU country.
-		$this->assertSame( $validator->validate( 'US', '123123123' ), '123123123' );
+		$this->assertFalse( $validator->validate( 'US', '123123123' ) );
 
 		// Valid.
-		$this->assertSame( $validator->validate( 'IT', '01231231231' ), 'IT01231231231' );
-		$this->assertSame( $validator->validate( 'ES', 'ESW2858339J' ), 'ESW2858339J' );
-	}
-
-	/**
-	 * Test API error
-	 */
-	public function test_api_error() {
-		$validator = new Testable_VAT_Validation( fn() => 'error' );
-
-		$this->assertFalse( $validator->validate( 'IT', '01231231231' ) );
-		$this->assertSame( $validator->get_error(), 'INVALID_JSON_RESPONSE' );
+		$this->assertTrue( $validator->validate( 'IT', '01231231231' ) );
+		$this->assertTrue( $validator->validate( 'ES', 'ESW2858339J' ) );
 	}
 }

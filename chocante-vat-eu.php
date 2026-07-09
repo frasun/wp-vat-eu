@@ -2,11 +2,12 @@
 /**
  * Plugin Name: VAT EU
  * Description: Validate European Union VAT number.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: Chocante
  * Text Domain: chocante-vat-eu
  * Domain Path: /languages
  * Requires Plugins: woocommerce
+ * Requires PHP: 8.0
  *
  * License: GNU General Public License v3.0
  * License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -23,7 +24,7 @@ if ( ! defined( 'MAIN_PLUGIN_FILE' ) ) {
 /**
  * Current plugin version.
  */
-define( 'CHOCANTE_VAT_EU_VERSION', '1.1.0' );
+define( 'CHOCANTE_VAT_EU_VERSION', '1.3.1' );
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-chocante-vat-eu.php';
 add_action( 'plugins_loaded', 'chocante_vat_eu_init', 1 );
