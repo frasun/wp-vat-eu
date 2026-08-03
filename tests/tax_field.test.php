@@ -17,6 +17,7 @@ class TaxField extends WP_UnitTestCase {
 	const TEST_TAX_ID  = 'ATU12345678';
 	const TEST_EMAIL   = 'test@user.com';
 	const TEST_COMPANY = 'Acme';
+	const TEST_COUNTRY = 'AT';
 
 	/**
 	 * Run after each test
@@ -143,7 +144,7 @@ class TaxField extends WP_UnitTestCase {
 		$customer_id = wc_create_new_customer( self::TEST_EMAIL );
 		$customer    = new WC_Customer( $customer_id );
 
-		$customer->set_billing_country( 'AT' );
+		$customer->set_billing_country( self::TEST_COUNTRY );
 		$customer->set_billing_company( self::TEST_COMPANY );
 		Chocante_VAT_EU::instance()->validate_tax_id_in_my_address( $customer_id, 'billing', array(), $customer );
 
@@ -159,7 +160,7 @@ class TaxField extends WP_UnitTestCase {
 		$customer_id = wc_create_new_customer( self::TEST_EMAIL );
 		$customer    = new WC_Customer( $customer_id );
 
-		$customer->set_billing_country( 'AT' );
+		$customer->set_billing_country( self::TEST_COUNTRY );
 		$customer->set_billing_company( self::TEST_COMPANY );
 		$customer->update_meta_data( Chocante_VAT_EU::TAX_ID, self::TEST_TAX_ID );
 		$vat_eu->validate_tax_id_in_my_address( $customer_id, 'billing', array(), $customer );
@@ -198,7 +199,7 @@ class TaxField extends WP_UnitTestCase {
 	 */
 	public function test_field_validation_checkout_wrong_tax_id() {
 		$vat_eu                           = new Testable_VAT_EU( new Mock_VAT_Validation() );
-		$_POST['billing_country']         = 'AT';
+		$_POST['billing_country']         = self::TEST_COUNTRY;
 		$_POST['billing_company']         = self::TEST_COMPANY;
 		$_POST[ Chocante_VAT_EU::TAX_ID ] = Mock_VAT_Validation::MOCK_BAD_TAX_ID;
 
@@ -213,7 +214,7 @@ class TaxField extends WP_UnitTestCase {
 	 */
 	public function test_field_validation_checkout() {
 		$vat_eu                           = new Testable_VAT_EU( new Mock_VAT_Validation() );
-		$_POST['billing_country']         = 'AT';
+		$_POST['billing_country']         = self::TEST_COUNTRY;
 		$_POST['billing_company']         = self::TEST_COMPANY;
 		$_POST[ Chocante_VAT_EU::TAX_ID ] = self::TEST_TAX_ID;
 
@@ -260,7 +261,7 @@ class TaxField extends WP_UnitTestCase {
 		$order  = wc_create_order();
 		$errors = new WP_Error();
 
-		$order->set_billing_country( 'AT' );
+		$order->set_billing_country( self::TEST_COUNTRY );
 		$order->set_billing_company( self::TEST_COMPANY );
 		$order->update_meta_data( CheckoutFields::get_group_key( 'other' ) . Chocante_VAT_EU::TAX_ID_FIELD, Mock_VAT_Validation::MOCK_BAD_TAX_ID );
 		$vat_eu->validate_tax_id_field_in_block_checkout( $order, $errors );
@@ -277,11 +278,37 @@ class TaxField extends WP_UnitTestCase {
 		$order  = wc_create_order();
 		$errors = new WP_Error();
 
-		$order->set_billing_country( 'AT' );
+		$order->set_billing_country( self::TEST_COUNTRY );
 		$order->set_billing_company( self::TEST_COMPANY );
 		$order->update_meta_data( CheckoutFields::get_group_key( 'other' ) . Chocante_VAT_EU::TAX_ID_FIELD, self::TEST_TAX_ID );
 		$vat_eu->validate_tax_id_field_in_block_checkout( $order, $errors );
 
 		$this->assertFalse( $errors->has_errors() );
+	}
+
+	/**
+	 * Test using local validation for the same shipping and shop base country, both in EU
+	 */
+	public function test_filed_validation_base_country() {
+		$validator = $this->getMockBuilder( Chocante_VAT_Validation::class )
+		->onlyMethods( array( 'validate_local', 'call_vies_api', 'validate' ) )
+		->getMock();
+
+		$vat_eu = new Testable_VAT_EU( $validator );
+
+		$filter = fn() => self::TEST_COUNTRY;
+		add_filter( 'woocommerce_countries_base_country', $filter );
+
+		$_POST['billing_country']         = self::TEST_COUNTRY;
+		$_POST['billing_company']         = self::TEST_COMPANY;
+		$_POST[ Chocante_VAT_EU::TAX_ID ] = self::TEST_TAX_ID;
+
+		$validator->expects( $this->never() )->method( 'validate' );
+		$validator->expects( $this->never() )->method( 'call_vies_api' );
+		$validator->expects( $this->once() )->method( 'validate_local' );
+
+		$vat_eu->validate_tax_id_in_checkout();
+
+		remove_filter( 'woocommerce_countries_base_country', $filter );
 	}
 }

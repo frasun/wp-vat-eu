@@ -58,7 +58,8 @@ class Chocante_VAT_Validation {
 	 * @return string
 	 */
 	private static function split_vat_id( $country, $vat_number = '' ) {
-		return str_starts_with( $vat_number, $country ) ? substr( $vat_number, 2 ) : $vat_number;
+		$country_prefix = COUNTRY_PATTERNS[ $country ]['prefix'] ?? $country;
+		return str_starts_with( $vat_number, $country_prefix ) ? substr( $vat_number, 2 ) : $vat_number;
 	}
 
 	/**
@@ -90,8 +91,7 @@ class Chocante_VAT_Validation {
 		try {
 			$result = $this->call_vies_api( $country, $vat_number );
 		} catch ( Throwable $ex ) {
-			$validator = COUNTRY_PATTERNS[ $country ]['validator'];
-			return empty( $validator ) || $validator( $vat_number );
+			return $this->validate_local( $country, $vat_number );
 		}
 
 		return $result['valid'];
@@ -162,5 +162,19 @@ class Chocante_VAT_Validation {
 		}
 
 		return $data;
+	}
+
+	/**
+	 * Validate VAT number using local validator
+	 *
+	 * @param string $country Country code.
+	 * @param string $vat_id VAT number.
+	 * @return bool
+	 */
+	public function validate_local( $country, $vat_id ) {
+		$vat_number = self::split_vat_id( $country, $vat_id );
+		$validator  = COUNTRY_PATTERNS[ $country ]['validator'] ?? null;
+
+		return empty( $validator ) || $validator( $vat_number );
 	}
 }

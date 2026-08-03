@@ -209,6 +209,7 @@ class Chocante_VAT_EU {
 				$is_vat_exempt = $this->validate_eu_company( $validated_tax_id, $company_name, $country );
 			}
 
+			$customer->update_meta_data( self::TAX_ID, $tax_id );
 			$this->set_vat_exemption( $customer, $is_vat_exempt );
 		}
 	}
@@ -227,13 +228,17 @@ class Chocante_VAT_EU {
 			if ( ! $has_company_name ) {
 				$this->error = self::ERROR_MISSING_COMPANY;
 				wc_add_notice( $this->get_validation_error(), 'error' );
+				return;
 			} else {
 				$validated_tax_id = $this->validate_vat_number( $country, $tax_id );
 
 				if ( false === $validated_tax_id ) {
 					wc_add_notice( $this->get_validation_error(), 'error' );
+					return;
 				}
 			}
+
+			$_POST[ self::TAX_ID ] = $tax_id;
 		}
 	}
 
@@ -742,10 +747,18 @@ class Chocante_VAT_EU {
 	public function validate_vat_number( $country, $vat_number ) {
 		$eu_countries = WC()->countries->get_european_union_countries( 'eu_vat' );
 
+		// Country outside EU.
 		if ( ! in_array( $country, $eu_countries, true ) ) {
 			return $vat_number;
 		}
 
+		// Shop country inside EU and shipping country same as shop country.
+		$base_country = WC()->countries->get_base_country();
+		if ( in_array( $base_country, $eu_countries, true ) && $country === $base_country ) {
+			return $this->validator->validate_local( $country, $vat_number );
+		}
+
+		// Shipping country inside EU.
 		$validated = $this->validator->validate( $country, $vat_number );
 
 		if ( false === $validated ) {

@@ -12,148 +12,147 @@ namespace WP_VAT_EU;
 const COUNTRY_PATTERNS = array(
 	// Austria.
 	'AT' => array(
-		'pattern'   => '/^(AT)?U\d{8}$/',
+		'pattern'   => '/^(AT)?U\d{8}/',
 		'validator' => __NAMESPACE__ . '\validator_at',
 	),
 	// Belgium.
 	'BE' => array(
-		'pattern'   => '/^(BE)?\d{10}$/',
+		'pattern'   => '/^(BE)?\d{10}/',
 		'validator' => __NAMESPACE__ . '\validator_be',
 	),
 	// Bulgaria.
 	'BG' => array(
-		'pattern'   => '/^(BG)?\d{9,10}$/',
+		'pattern'   => '/^(BG)?\d{9,10}/',
 		'validator' => __NAMESPACE__ . '\validator_bg',
 	),
 	// Croatia.
 	'HR' => array(
-		'pattern'   => '/^(HR)?\d{11}$/',
+		'pattern'   => '/^(HR)?\d{11}/',
 		'validator' => __NAMESPACE__ . '\validator_hr',
 	),
 	// Cyprus.
 	'CY' => array(
-		'pattern'   => '/^(CY)?\d{8}[A-Z]$/',
-		'validator' => __NAMESPACE__ . '\validator_cy',
+		'pattern' => '/^(CY)?[A-Z0-9]{8}/',
 	),
 	// Czech Republic.
 	'CZ' => array(
-		'pattern'   => '/^(CZ)?\d{8,10}$/',
+		'pattern'   => '/^(CZ)?\d{8,10}/',
 		'validator' => __NAMESPACE__ . '\validator_cz',
 	),
 	// Denmark.
 	'DK' => array(
-		'pattern'   => '/^(DK)?\d{8}$/',
+		'pattern'   => '/^(DK)?\d{8}/',
 		'validator' => __NAMESPACE__ . '\validator_dk',
 	),
 	// Estonia.
 	'EE' => array(
-		'pattern'   => '/^(EE)?\d{9}$/',
+		'pattern'   => '/^(EE)?\d{9}/',
 		'validator' => __NAMESPACE__ . '\validator_ee',
 	),
 	// Finland.
 	'FI' => array(
-		'pattern'   => '/^(FI)?\d{8}$/',
+		'pattern'   => '/^(FI)?\d{8}/',
 		'validator' => __NAMESPACE__ . '\validator_fi',
 	),
 	// France.
 	'FR' => array(
-		'pattern'   => '/^(FR)?[A-Z0-9]{2}\d{9}$/',
+		'pattern'   => '/^(FR)?[A-Z0-9]{2}\d{9}/',
 		'validator' => __NAMESPACE__ . '\validator_fr',
 	),
 	// Germany.
 	'DE' => array(
-		'pattern'   => '/^(DE)?\d{9}$/',
+		'pattern'   => '/^(DE)?\d{9}/',
 		'validator' => __NAMESPACE__ . '\validator_de',
 	),
 	// United Kingdom.
 	'GB' => array(
-		'pattern' => '/^(GB)?\d{9}$/',
+		'pattern' => '/^(GB)?\d{9}/',
 	),
 	// Greece.
 	'GR' => array(
-		'pattern'   => '/^(EL)?\d{9}$/',
+		'pattern'   => '/^(EL)?\d{9}/',
 		'validator' => __NAMESPACE__ . '\validator_gr',
+		'prefix'    => 'EL',
 	),
 	// Hungary.
 	'HU' => array(
-		'pattern'   => '/^(HU)?\d{8}$/',
+		'pattern'   => '/^(HU)?\d{8}/',
 		'validator' => __NAMESPACE__ . '\validator_hu',
 	),
 	// Ireland.
 	'IE' => array(
-		'pattern'   => '/^(IE)?\d{7}[A-Z]{1,2}$/',
+		'pattern'   => '/^(IE)?\d{7}[A-Z]{1,2}/',
 		'validator' => __NAMESPACE__ . '\validator_ie',
 	),
 	// Italy.
 	'IT' => array(
-		'pattern'   => '/^(IT)?\d{11}$/',
+		'pattern'   => '/^(IT)?\d{11}/',
 		'validator' => __NAMESPACE__ . '\validator_it',
 	),
 	// Latvia.
 	'LV' => array(
-		'pattern'   => '/^(LV)?\d{11}$/',
+		'pattern'   => '/^(LV)?\d{11}/',
 		'validator' => __NAMESPACE__ . '\validator_lv',
 	),
 	// Lithuania.
 	'LT' => array(
-		'pattern'   => '/^(LT)?(\d{9}|\d{12})$/',
+		'pattern'   => '/^(LT)?(\d{9}|\d{12})/',
 		'validator' => __NAMESPACE__ . '\validator_lt',
 	),
 	// Luxembourg.
 	'LU' => array(
-		'pattern'   => '/^(LU)?\d{8}$/',
+		'pattern'   => '/^(LU)?\d{8}/',
 		'validator' => __NAMESPACE__ . '\validator_lu',
 	),
 	// Malta.
 	'MT' => array(
-		'pattern'   => '/^(MT)?\d{8}$/',
+		'pattern'   => '/^(MT)?\d{8}/',
 		'validator' => __NAMESPACE__ . '\validator_mt',
 	),
 	// Monaco.
 	'MC' => array(
-		'pattern' => '/^(FR)?[A-Z0-9]{2}\d{9}$/',
+		'pattern' => '/^(FR)?[A-Z0-9]{2}\d{9}/',
 	),
 	// Netherlands.
 	'NL' => array(
-		'pattern'   => '/^(NL)?\d{9}B\d{2}$/',
+		'pattern'   => '/^(NL)?\d{9}B\d{2}/',
 		'validator' => __NAMESPACE__ . '\validator_nl',
 	),
 	// Northern Ireland.
 	'XI' => array(
-		'pattern' => '/^(XI)?\d{9}$/',
+		'pattern' => '/^(XI)?\d{9}/',
 	),
 	// Poland.
 	'PL' => array(
-		'pattern'   => '/^(PL)?\d{10}$/',
+		'pattern'   => '/^(PL)?\d{10}/',
 		'validator' => __NAMESPACE__ . '\validator_pl',
 	),
 	// Portugal.
 	'PT' => array(
-		'pattern'   => '/^(PT)?\d{9}$/',
+		'pattern'   => '/^(PT)?\d{9}/',
 		'validator' => __NAMESPACE__ . '\validator_pt',
 	),
 	// Romania.
 	'RO' => array(
-		'pattern'   => '/^(RO)?\d{2,10}$/',
-		'validator' => __NAMESPACE__ . '\validator_ro',
+		'pattern' => '/^(RO)?\d{2,10}/',
 	),
 	// Slovakia.
 	'SK' => array(
-		'pattern'   => '/^(SK)?\d{10}$/',
+		'pattern'   => '/^(SK)?\d{10}/',
 		'validator' => __NAMESPACE__ . '\validator_sk',
 	),
 	// Slovenia.
 	'SI' => array(
-		'pattern'   => '/^(SI)?\d{8}$/',
+		'pattern'   => '/^(SI)?\d{8}/',
 		'validator' => __NAMESPACE__ . '\validator_si',
 	),
 	// Spain.
 	'ES' => array(
-		'pattern' => '/^(ES)?[A-Z](\d{8}|\d{7}[A-Z])$/',
+		'pattern' => '/^(ES)?[A-Z](\d{8}|\d{7}[A-Z])/',
 	),
 	// Sweden.
 	'SE' => array(
-		'pattern'   => '/^(SE)?\d{12}$/',
+		'pattern'   => '/^(SE)?\d{12}/',
 		'validator' => __NAMESPACE__ . '\validator_se',
 	),
 );
@@ -165,6 +164,12 @@ const COUNTRY_PATTERNS = array(
  * @return bool
  */
 function validator_at( $vat ) {
+	if ( 'U' !== $vat[0] ) {
+		return false;
+	}
+
+	$vat = substr( $vat, 1 );
+
 	$multipliers = array( 1, 2, 1, 2, 1, 2, 1 );
 	$total       = 0;
 	for ( $i = 0; $i < 7; $i++ ) {
@@ -250,30 +255,6 @@ function validator_bg( $vat ) {
 		$check = 0;
 	}
 	return (int) $vat[9] === $check;
-}
-
-/**
- * Pattern validation (Cyprus)
- *
- * @param string $vat VAT number.
- * @return bool
- */
-function validator_cy( $vat ) {
-	if ( 12 === (int) substr( $vat, 0, 2 ) ) {
-		return false;
-	}
-	$total = 0;
-	for ( $i = 0; $i < 8; $i++ ) {
-		$d = (int) $vat[ $i ];
-		if ( 0 === $i % 2 ) {
-			$d = match ( $d ) {
-				0 => 1, 1 => 0, 2 => 5, 3 => 7, 4 => 9,
-				default => $d * 2 + 3,
-			};
-		}
-		$total += $d;
-	}
-	return chr( $total % 26 + 65 ) === $vat[8];
 }
 
 /**
@@ -652,27 +633,6 @@ function validator_pt( $vat ) {
 		$check = 0;
 	}
 	return (int) $vat[8] === $check;
-}
-
-/**
- * Pattern validation (Romania)
- *
- * @param string $vat VAT number.
- * @return bool
- */
-function validator_ro( $vat ) {
-	$multipliers = array( 7, 5, 3, 2, 1, 7, 5, 3, 2 );
-	$len         = strlen( $vat );
-	$mult        = array_slice( $multipliers, 9 - $len );
-	$total       = 0;
-	for ( $i = 0; $i < $len - 1; $i++ ) {
-		$total += (int) $vat[ $i ] * $mult[ $i ];
-	}
-	$check = ( 10 * $total ) % 11;
-	if ( 10 === $check ) {
-		$check = 0;
-	}
-	return (int) $vat[ $len - 1 ] === $check;
 }
 
 /**
