@@ -136,7 +136,8 @@ class Chocante_VAT_EU {
 		add_action( 'woocommerce_before_checkout_form', array( $this, 'add_client_checkout_validation' ) );
 
 		// Set VAT exemption.
-		add_action( 'wp', array( $this, 'maybe_set_vat_exemption' ) );
+		add_action( 'woocommerce_init', array( $this, 'maybe_set_vat_exemption' ) );
+		add_action( 'wp_logout', array( $this, 'handle_logout' ) );
 
 		// Add field to block checkout.
 		add_action( 'woocommerce_init', array( $this, 'init_block_checkout' ) );
@@ -462,7 +463,7 @@ class Chocante_VAT_EU {
 	 */
 	public function maybe_set_vat_exemption() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( ( isset( $_REQUEST['wc-ajax'] ) && 'update_order_review' === $_REQUEST['wc-ajax'] ) || is_admin() ) {
+		if ( ( isset( $_REQUEST['wc-ajax'] ) && 'update_order_review' === $_REQUEST['wc-ajax'] ) || ! wc()->customer ) {
 			return;
 		}
 
@@ -487,6 +488,13 @@ class Chocante_VAT_EU {
 		}
 
 		$this->set_vat_exemption( $customer, $should_exempt );
+	}
+
+	/**
+	 * Unset VAT exemption cookie on logout
+	 */
+	public function handle_logout() {
+		$this->set_vat_exemption( wc()->customer, false );
 	}
 
 	/**
