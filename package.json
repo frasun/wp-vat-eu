@@ -1,11 +1,12 @@
 {
 	"name": "wp-vat-eu",
-	"version": "1.4.1",
+	"version": "1.4.2",
 	"description": "Validate European Union VAT number.",
 	"scripts": {
 		"test": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-vat-eu vendor/bin/phpunit",
 		"coverage:text": "npm run test -- --coverage-text",
-		"coverage:html": "npm run test -- --coverage-html tests/coverage  "
+		"coverage:html": "npm run test -- --coverage-html tests/coverage",
+		"make": "webpack && rm -f wp-vat-eu.zip && zip -r wp-vat-eu.zip chocante-vat-eu.php includes js languages"
 	},
 	"repository": {
 		"type": "git",
